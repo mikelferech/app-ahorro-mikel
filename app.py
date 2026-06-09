@@ -25,6 +25,39 @@ st.set_page_config(page_title="Ahorro Mikel", page_icon="💰", layout="wide")
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
 
+def parse_money(value):
+    """Convierte importes de Excel a float aunque vengan con €, puntos, comas o fórmulas simples."""
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+    if not text:
+        return 0.0
+
+    # Fórmulas simples tipo =74000+50000
+    if text.startswith('='):
+        expr = text[1:].replace('€', '').replace(' ', '')
+        # Solo permitimos números y operaciones básicas para evitar ejecutar nada raro
+        allowed = set('0123456789.,+-*/()')
+        if expr and all(ch in allowed for ch in expr):
+            expr = expr.replace(',', '.')
+            try:
+                return float(eval(expr, {"__builtins__": {}}, {}))
+            except Exception:
+                return 0.0
+        return 0.0
+
+    text = text.replace('€', '').replace(' ', '')
+    # Formato español: 1.234,56 -> 1234.56
+    if ',' in text:
+        text = text.replace('.', '').replace(',', '.')
+    try:
+        return float(text)
+    except ValueError:
+        return 0.0
+
+
 def get_wb():
     if EXCEL_PATH.exists():
         return load_workbook(EXCEL_PATH)
@@ -109,11 +142,16 @@ def extraer_ahorro_original(wb) -> pd.DataFrame:
             if not isinstance(mes, (datetime, date)):
                 continue
             vals = {headers[c-1]: ws.cell(r, c).value for c in range(1, min(ws.max_column, 10) + 1)}
+            bbva = parse_money(vals.get("BBVA"))
+            # En el Excel original BBVA puede venir como fórmula; si no hay valor calculable, usamos Cuenta + Ahorro.
+            if bbva == 0:
+                bbva = parse_money(vals.get("Cuenta")) + parse_money(vals.get("Ahorro"))
+            openbank = parse_money(vals.get("Openbank Cajamar"))
             rows.append({
                 "Mes": pd.to_datetime(mes).date(),
-                "BBVA": float(vals.get("BBVA") or 0),
-                "Openbank": parse_money(vals.get("Openbank")),
-"Cajamar": parse_money(vals.get("Cajamar")),
+                "BBVA": bbva,
+                "Openbank": openbank,
+                "Cajamar": 0.0,
             })
     df = pd.DataFrame(rows)
     if df.empty:
@@ -172,12 +210,8 @@ def render_ahorro():
                 st.success("Saldo guardado.")
                 st.rerun()
 
-    if not df.empty:
-        min_d = pd.to_datetime(df["Mes"]).min().date()
-        max_d = pd.to_datetime(df["Mes"]).max().date()
-        periodo = st.slider("Periodo a mostrar", min_value=min_d, max_value=max_d, value=(min_d, max_d), format="MM/YYYY")
-    else:
-        periodo = None
+    min_d, max_d = pd.to_datetime(df["Mes"]).min().date(), pd.to_datetime(df["Mes"]).max().date() if not df.empty else (date.today(), date.today())
+    periodo = st.slider("Periodo a mostrar", min_value=min_d, max_value=max_d, value=(min_d, max_d), format="MM/YYYY") if not df.empty else None
     chart_df = df[(pd.to_datetime(df["Mes"]).dt.date >= periodo[0]) & (pd.to_datetime(df["Mes"]).dt.date <= periodo[1])] if periodo else df
     st.plotly_chart(px.line(chart_df, x="Mes", y="Total", title="Evolución del ahorro total", markers=True), use_container_width=True)
     st.plotly_chart(px.bar(chart_df, x="Mes", y="+/-", title="Diferencia respecto al mes anterior"), use_container_width=True)
