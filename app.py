@@ -112,8 +112,8 @@ def extraer_ahorro_original(wb) -> pd.DataFrame:
             rows.append({
                 "Mes": pd.to_datetime(mes).date(),
                 "BBVA": float(vals.get("BBVA") or 0),
-                "Openbank": float(vals.get("Openbank Cajamar") or 0),
-                "Cajamar": 0.0,
+                "Openbank": parse_money(vals.get("Openbank")),
+"Cajamar": parse_money(vals.get("Cajamar")),
             })
     df = pd.DataFrame(rows)
     if df.empty:
