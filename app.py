@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.5.2"
+APP_VERSION = "0.5.4"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -204,12 +204,29 @@ def bank_color(k):
 
 def load_ahorro():
     keys=bank_keys(False)
-    p = path('ahorro.csv')
     df = read_csv('ahorro.csv')
-    if df.empty or 'Fecha' not in df.columns:
-        df = build_ahorro_from_saldos()
-        if not df.empty:
-            save_csv('ahorro.csv', df)
+
+    def _needs_seed(d):
+        if d.empty or 'Fecha' not in d.columns:
+            return True
+        tmp=d.copy()
+        tmp['Fecha']=pd.to_datetime(tmp['Fecha'], errors='coerce')
+        tmp=tmp.dropna(subset=['Fecha'])
+        if tmp.empty:
+            return True
+        # Si no hay importes válidos, reconstruimos desde saldos.xlsx.
+        total_cols=[c for c in keys if c in tmp.columns]
+        if total_cols:
+            total=tmp[total_cols].applymap(money).sum(axis=1).sum()
+            if total <= 0:
+                return True
+        return False
+
+    if _needs_seed(df):
+        seeded = build_ahorro_from_saldos()
+        if not seeded.empty:
+            save_csv('ahorro.csv', seeded)
+            df = seeded
     if df.empty:
         return pd.DataFrame(columns=['Fecha']+keys+['Total','Diferencia'])
     df['Fecha']=pd.to_datetime(df['Fecha'], errors='coerce').dt.date
@@ -337,21 +354,21 @@ def kpis(df):
     if keys: cols[2].metric(bank_name(keys[0]), euro(last.get(keys[0],0)))
     if len(keys)>1: cols[3].metric(' + '.join(bank_name(k) for k in keys[1:3]), euro(sum(money(last.get(k,0)) for k in keys[1:3])))
 
-def charts(df):
+def charts(df, prefix="chart"):
     if df.empty: return
     df=df.sort_values('Fecha').copy(); df['Mes']=df['Fecha'].apply(month_label)
     c1,c2=st.columns(2)
     fig=go.Figure(go.Scatter(x=df['Mes'], y=df['Total'], mode='lines+markers'))
     fig.update_layout(title='Patrimonio histórico', height=360, margin=dict(l=15,r=15,t=45,b=15))
-    c1.plotly_chart(fig, use_container_width=True)
+    c1.plotly_chart(fig, use_container_width=True, key=f"{prefix}_patrimonio")
     colors=['#16a34a' if v>=0 else '#dc2626' for v in df['Diferencia']]
     fig2=go.Figure(go.Bar(x=df['Mes'], y=df['Diferencia'], marker_color=colors))
     fig2.update_layout(title='+/- mensual', height=360, margin=dict(l=15,r=15,t=45,b=15))
-    c2.plotly_chart(fig2, use_container_width=True)
+    c2.plotly_chart(fig2, use_container_width=True, key=f"{prefix}_diferencia")
 
 def render_dashboard():
     st.header('📊 Dashboard')
-    df=load_ahorro(); kpis(df); charts(df)
+    df=load_ahorro(); kpis(df); charts(df, "dashboard")
     st.download_button('⬇️ Descargar Excel actualizado', data=export_excel_bytes(), file_name='Ahorro_Mikel_actualizado.xlsx', use_container_width=False)
 
 def render_ahorro():
@@ -371,7 +388,7 @@ def render_ahorro():
             base=df[df['Fecha']!=sel].copy() if not df.empty else pd.DataFrame()
             save_ahorro(pd.concat([base,pd.DataFrame([vals])], ignore_index=True)); st.success('Guardado'); st.rerun()
     if df.empty: return
-    charts(df)
+    charts(df, "ahorro")
     st.subheader('Tabla de saldos')
     chips=st.columns(max(1,len(keys)))
     for i,k in enumerate(keys): chips[i].markdown(f"<div class='bank-chip' style='background:{bank_color(k)}'>{bank_name(k)}</div>", unsafe_allow_html=True)
