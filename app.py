@@ -292,7 +292,7 @@ def export_excel_bytes():
         read_csv('festivos.csv').to_excel(writer, sheet_name='Festivos', index=False)
     bio.seek(0); return bio.getvalue()
 
-def render_bank_config(prefix='bank'):
+def render_bank_config(prefix='bank_config'):
     with st.expander('⚙️ Configuración de bancos', expanded=False):
         cfg=load_banks().reset_index(drop=True)
         st.caption('Edita nombres, colores, orden, activa/oculta o añade bancos. Los datos históricos no se pierden.')
