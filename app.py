@@ -19,7 +19,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.6.7"
+APP_VERSION = "0.6.8"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -87,6 +87,24 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem
 .vadillo-box img{max-height:78px;max-width:95%;object-fit:contain;}
 @media (prefers-color-scheme: dark){.vadillo-box{background:#111827}.vadillo-box img{filter: grayscale(1) brightness(0) invert(1);}}
 .payroll-table{width:100%;border-collapse:collapse;font-size:1.00rem;table-layout:fixed}.payroll-table th{background:#2F3B4F;color:#fff;padding:6px 6px;border-bottom:2px solid #00a2eb;text-align:right}.payroll-table th:first-child,.payroll-table td:first-child{text-align:left}.payroll-table td{padding:5px 6px;border:1px solid rgba(128,128,128,.22);text-align:right;font-variant-numeric:tabular-nums}.payroll-ok{background:rgba(16,185,129,.18)}.payroll-warn{background:rgba(245,158,11,.16)}.payroll-bad{background:rgba(220,38,38,.20)}.payroll-income{background:rgba(59,130,246,.18)!important;color:#dbeafe!important;font-weight:900}.compact-editor [data-testid="stDataFrame"]{font-size:.98rem!important}.irpf-table{width:100%;border-collapse:collapse;font-size:1.05rem}.irpf-table th{background:#2F3B4F;color:white;padding:9px;border-bottom:2px solid #00a2eb}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
+
+/* Azul MFE también en hover/focus de formularios y botones */
+.stButton > button:hover, .stDownloadButton > button:hover {
+  border-color:#00a2eb!important;
+  color:#00a2eb!important;
+}
+.stButton > button:focus, .stDownloadButton > button:focus {
+  border-color:#00a2eb!important;
+  box-shadow:0 0 0 0.12rem rgba(0,162,235,.35)!important;
+}
+input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb="select"]:focus-within {
+  border-color:#00a2eb!important;
+  box-shadow:0 0 0 1px #00a2eb!important;
+}
+[data-baseweb="input"]:hover, [data-baseweb="select"]:hover {
+  border-color:#00a2eb!important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -148,12 +166,14 @@ def memory_store():
     # También se escribe a CSV para poder descargar copia.
     return {}
 
-@st.cache_resource
 def cookie_manager_resource():
+    """CookieManager no debe ir cacheado: Streamlit lanza CachedWidgetWarning si un componente/widget se crea dentro de cache.
+    Se instancia en cada rerun de forma ligera para poder usar cookies como respaldo de nóminas/vacaciones.
+    """
     if stx is None:
         return None
     try:
-        return stx.CookieManager()
+        return stx.CookieManager(key="ahorro_mikel_cookie_manager")
     except Exception:
         return None
 
