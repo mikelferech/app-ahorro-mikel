@@ -14,7 +14,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.6.5"
+APP_VERSION = "0.6.6"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -46,12 +46,16 @@ h2 {font-size: 2.05rem !important;} h3 {font-size: 1.55rem !important;}
 [data-testid="stMetricValue"] {font-size: 2.35rem !important; line-height:1.05!important;}
 [data-testid="stMetricDelta"] {font-size: 1.00rem !important;}
 .stTabs [data-baseweb="tab"] {height:2.75rem!important; padding-left:.75rem!important; padding-right:.75rem!important;}
+
+.stTabs [aria-selected="true"] p, .stTabs [aria-selected="true"] {color:#00a2eb!important;}
+.stTabs [data-baseweb="tab-highlight"] {background-color:#00a2eb!important;}
+[data-testid="stDecoration"] {background:#00a2eb!important;}
 .stTabs [data-baseweb="tab"] p, .stTabs [role="tab"] p {font-size: 1.05rem !important; font-weight: 900 !important;}
 [data-testid="stExpander"] summary p {font-size:1.08rem!important; font-weight:900!important;}
 .stDataFrame, [data-testid="stDataFrame"] {font-size: 1.05rem !important;}
-[data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [data-testid="stDataFrameResizable"] {background:#2F3B4F!important;color:#fff!important;font-weight:900!important;font-size:1.05rem!important;border-bottom:2px solid #ef4444!important;}
+[data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [data-testid="stDataFrameResizable"] {background:#2F3B4F!important;color:#fff!important;font-weight:900!important;font-size:1.05rem!important;border-bottom:2px solid #00a2eb!important;}
 [data-testid="stDataFrame"] div[role="columnheader"] {background:#2F3B4F!important;color:#fff!important;}
-thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem!important;border-bottom:2px solid #ef4444!important;}
+thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem!important;border-bottom:2px solid #00a2eb!important;}
 [data-testid="stDataFrame"] [role="gridcell"] {font-size:1.00rem!important;}
 .login-card {max-width:560px;margin:3.5rem auto 1rem auto;padding:1.8rem;border:1px solid rgba(128,128,128,.25);border-radius:24px;background:rgba(128,128,128,.06);text-align:center;}
 .login-card img {max-width:360px;width:88%;margin-bottom:.6rem;}
@@ -75,7 +79,7 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem
 .vadillo-box{background:#fff;border-radius:16px;padding:12px;border:1px solid rgba(128,128,128,.2);display:flex;align-items:center;justify-content:center;margin-bottom:1rem;}
 .vadillo-box img{max-height:78px;max-width:95%;object-fit:contain;}
 @media (prefers-color-scheme: dark){.vadillo-box{background:#111827}.vadillo-box img{filter: grayscale(1) brightness(0) invert(1);}}
-.payroll-table{width:100%;border-collapse:collapse;font-size:1.00rem;table-layout:fixed}.payroll-table th{background:#2F3B4F;color:#fff;padding:6px 6px;border-bottom:2px solid #ef4444;text-align:right}.payroll-table th:first-child,.payroll-table td:first-child{text-align:left}.payroll-table td{padding:5px 6px;border:1px solid rgba(128,128,128,.22);text-align:right;font-variant-numeric:tabular-nums}.payroll-ok{background:rgba(16,185,129,.18)}.payroll-warn{background:rgba(245,158,11,.16)}.payroll-bad{background:rgba(220,38,38,.20)}.payroll-income{background:rgba(59,130,246,.18)!important;color:#dbeafe!important;font-weight:900}.compact-editor [data-testid="stDataFrame"]{font-size:.98rem!important}.irpf-table{width:100%;border-collapse:collapse;font-size:1.05rem}.irpf-table th{background:#2F3B4F;color:white;padding:9px;border-bottom:2px solid #ef4444}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
+.payroll-table{width:100%;border-collapse:collapse;font-size:1.00rem;table-layout:fixed}.payroll-table th{background:#2F3B4F;color:#fff;padding:6px 6px;border-bottom:2px solid #00a2eb;text-align:right}.payroll-table th:first-child,.payroll-table td:first-child{text-align:left}.payroll-table td{padding:5px 6px;border:1px solid rgba(128,128,128,.22);text-align:right;font-variant-numeric:tabular-nums}.payroll-ok{background:rgba(16,185,129,.18)}.payroll-warn{background:rgba(245,158,11,.16)}.payroll-bad{background:rgba(220,38,38,.20)}.payroll-income{background:rgba(59,130,246,.18)!important;color:#dbeafe!important;font-weight:900}.compact-editor [data-testid="stDataFrame"]{font-size:.98rem!important}.irpf-table{width:100%;border-collapse:collapse;font-size:1.05rem}.irpf-table th{background:#2F3B4F;color:white;padding:9px;border-bottom:2px solid #00a2eb}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
 </style>
 """, unsafe_allow_html=True)
 
@@ -710,8 +714,8 @@ def render_vacaciones(year):
     st.metric('Días restantes', f"{VACACIONES_ANUALES-used:g}", delta=f"Usados: {used:g}")
 
     with st.expander('➕ Añadir vacaciones', expanded=False):
-        ini=st.date_input('Inicio', value=date(year, date.today().month, 1), min_value=date(year,1,1), max_value=date(year,12,31), key=f'vac_ini_{year}')
-        fin=st.date_input('Fin', value=ini, min_value=ini, max_value=date(year,12,31), key=f'vac_fin_{year}_{ini.isoformat()}')
+        ini=st.date_input('Inicio', value=date(year, date.today().month, 1), min_value=date(year,1,1), max_value=date(year,12,31), format='DD/MM/YYYY', key=f'vac_ini_{year}')
+        fin=st.date_input('Fin', value=ini, min_value=ini, max_value=date(year,12,31), format='DD/MM/YYYY', key=f'vac_fin_{year}_{ini.isoformat()}')
         calc=laboral_days_between(ini, fin, year)
         dias=st.number_input('Días computables', value=float(calc), step=.5, format='%.1f', help='Calculado automáticamente solo con laborables: excluye sábados, domingos y festivos. Puedes editarlo si hace falta.', key=f'vac_dias_{year}_{ini.isoformat()}_{fin.isoformat()}')
         nota=st.text_input('Nota', key=f'vac_nota_{year}_{ini.isoformat()}')
@@ -741,8 +745,8 @@ def render_vacaciones(year):
                 with st.container():
                     st.markdown(f"**{title}**")
                     c=st.columns([1.15,1.15,.8,1.8,.55,.55])
-                    ini2=c[0].date_input('Inicio', value=pd.to_datetime(r['Inicio']).date(), min_value=date(year,1,1), max_value=date(year,12,31), key=f'vac_edit_ini_{year}_{i}', label_visibility='collapsed')
-                    fin2=c[1].date_input('Fin', value=max(pd.to_datetime(r['Fin']).date(), ini2), min_value=ini2, max_value=date(year,12,31), key=f'vac_edit_fin_{year}_{i}_{ini2.isoformat()}', label_visibility='collapsed')
+                    ini2=c[0].date_input('Inicio', value=pd.to_datetime(r['Inicio']).date(), min_value=date(year,1,1), max_value=date(year,12,31), format='DD/MM/YYYY', key=f'vac_edit_ini_{year}_{i}', label_visibility='collapsed')
+                    fin2=c[1].date_input('Fin', value=max(pd.to_datetime(r['Fin']).date(), ini2), min_value=ini2, max_value=date(year,12,31), format='DD/MM/YYYY', key=f'vac_edit_fin_{year}_{i}_{ini2.isoformat()}', label_visibility='collapsed')
                     calc2=laboral_days_between(ini2, fin2, year)
                     dias2=c[2].number_input('Días', value=float(money(r['Dias']) if money(r['Dias']) else calc2), step=.5, format='%.1f', key=f'vac_edit_dias_{year}_{i}', label_visibility='collapsed')
                     nota2=c[3].text_input('Nota', value='' if pd.isna(r.get('Nota','')) else str(r.get('Nota','')), key=f'vac_edit_nota_{year}_{i}', label_visibility='collapsed')
