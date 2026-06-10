@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.5.8"
+APP_VERSION = "0.6.0"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -36,9 +36,9 @@ h2 {font-size: 2.75rem !important;} h3 {font-size: 2.15rem !important;}
 .stTabs [data-baseweb="tab"] p, .stTabs [role="tab"] p {font-size: 1.28rem !important; font-weight: 900 !important;}
 [data-testid="stExpander"] summary p {font-size:1.22rem!important; font-weight:900!important;}
 .stDataFrame, [data-testid="stDataFrame"] {font-size: 1.20rem !important;}
-[data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [data-testid="stDataFrameResizable"] {background:#334155!important;color:#fff!important;font-weight:900!important;font-size:1.16rem!important;}
-[data-testid="stDataFrame"] div[role="columnheader"] {background:#334155!important;color:#fff!important;}
-thead tr th {background:#334155!important;color:#fff!important;font-size:1.16rem!important;}
+[data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [data-testid="stDataFrameResizable"] {background:#2F3B4F!important;color:#fff!important;font-weight:900!important;font-size:1.20rem!important;border-bottom:2px solid #ef4444!important;}
+[data-testid="stDataFrame"] div[role="columnheader"] {background:#2F3B4F!important;color:#fff!important;}
+thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.20rem!important;border-bottom:2px solid #ef4444!important;}
 [data-testid="stDataFrame"] [role="gridcell"] {font-size:1.13rem!important;}
 .login-card {max-width:560px;margin:3.5rem auto 1rem auto;padding:1.8rem;border:1px solid rgba(128,128,128,.25);border-radius:24px;background:rgba(128,128,128,.06);text-align:center;}
 .login-card img {max-width:330px;width:85%;margin-bottom:1rem;}
@@ -62,7 +62,7 @@ thead tr th {background:#334155!important;color:#fff!important;font-size:1.16rem
 .vadillo-box{background:#fff;border-radius:16px;padding:12px;border:1px solid rgba(128,128,128,.2);display:flex;align-items:center;justify-content:center;margin-bottom:1rem;}
 .vadillo-box img{max-height:78px;max-width:95%;object-fit:contain;}
 @media (prefers-color-scheme: dark){.vadillo-box{background:#111827}.vadillo-box img{filter: grayscale(1) brightness(0) invert(1);}}
-.irpf-table{width:100%;border-collapse:collapse;font-size:.92rem}.irpf-table th{background:#d4006f;color:white;padding:7px}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
+.irpf-table{width:100%;border-collapse:collapse;font-size:1.05rem}.irpf-table th{background:#2F3B4F;color:white;padding:9px;border-bottom:2px solid #ef4444}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
 </style>
 """, unsafe_allow_html=True)
 
@@ -296,6 +296,30 @@ def calc_nominas(df):
 
 def save_nominas(df): save_csv('nominas.csv', calc_nominas(df))
 
+def nomina_status(diff):
+    diff=money(diff)
+    if abs(diff) <= 0.01:
+        return '✅ Correcto'
+    if abs(diff) <= 1.00:
+        return '🟡 Revisar'
+    return '🔴 Diferencia'
+
+def style_nominas(row):
+    diff=money(row.get('Diferencia',0))
+    if abs(diff) <= 0.01:
+        color='background-color: rgba(22, 163, 74, .18); color: inherit;'
+    elif abs(diff) <= 1.00:
+        color='background-color: rgba(234, 179, 8, .18); color: inherit;'
+    else:
+        color='background-color: rgba(220, 38, 38, .18); color: inherit;'
+    return [color for _ in row]
+
+def ordered_nominas(df):
+    order={m:i+1 for i,m in enumerate(MONTHS_ES)}
+    if df.empty: return df
+    out=df.copy(); out['_m']=out['Mes'].map(order).fillna(99)
+    return out.sort_values(['Anio','_m']).drop(columns=['_m'])
+
 def load_intereses():
     cols=['Anio','Mes','Banco','InteresBruto','Saldo','Retencion','NetoEsperado','Ingresado','Diferencia']
     df=read_csv('intereses.csv', cols)
@@ -442,26 +466,90 @@ def render_ahorro():
 # payroll/vacations/interests/irpf
 def render_nominas():
     st.header('💼 Nóminas')
-    if img_src(VADILLO_LOGO): st.markdown(f"<div class='vadillo-box'><img src='{img_src(VADILLO_LOGO)}'></div>", unsafe_allow_html=True)
-    df=load_nominas(); year=st.selectbox('Año', list(range(date.today().year-2,date.today().year+9)), index=2)
-    with st.expander('➕ Añadir / actualizar nómina', expanded=True):
-        mes=st.selectbox('Mes', MONTHS_ES, index=date.today().month-1, key='nom_mes')
-        ex=df[(df['Anio']==year)&(df['Mes']==mes)]
-        d=ex.iloc[0].to_dict() if not ex.empty else {}
+    if img_src(VADILLO_LOGO):
+        st.markdown(f"<div class='vadillo-box'><img src='{img_src(VADILLO_LOGO)}'></div>", unsafe_allow_html=True)
+
+    df=load_nominas()
+    years=list(range(date.today().year-2,date.today().year+9))
+    year=st.selectbox('Año', years, index=years.index(date.today().year) if date.today().year in years else 2, key='nom_year')
+
+    with st.expander('⚙️ Generar 12 nóminas del año', expanded=True):
+        st.caption('Rellena una plantilla mensual una vez y crea ENE-DIC. Después, cada mes solo introduces lo ingresado y la app comprueba si coincide.')
         c=st.columns(5)
-        bruto=c[0].number_input('Bruto', value=float(money(d.get('Bruto',0))), step=.01, format='%.2f')
-        ss=c[1].number_input('SS 4,85%', value=float(money(d.get('SS', bruto*.0485))), step=.01, format='%.2f')
-        desempleo=c[2].number_input('Desempleo 1,65%', value=float(money(d.get('Desempleo', bruto*.0165))), step=.01, format='%.2f')
-        irpf=c[3].number_input('IRPF', value=float(money(d.get('IRPF',0))), step=.01, format='%.2f')
-        ingresado=c[4].number_input('Ingresado', value=float(money(d.get('Ingresado',0))), step=.01, format='%.2f')
-        otros=st.number_input('Otros descuentos', value=float(money(d.get('Otros',0))), step=.01, format='%.2f')
-        neto=bruto-ss-desempleo-irpf-otros; st.info(f'Neto esperado: {euro(neto)} · Diferencia: {euro(ingresado-neto)}')
-        if st.button('Guardar nómina', use_container_width=True):
-            row={'Anio':year,'Mes':mes,'Bruto':bruto,'SS':ss,'Desempleo':desempleo,'IRPF':irpf,'Otros':otros,'Ingresado':ingresado}
-            base=df[~((df['Anio']==year)&(df['Mes']==mes))].copy(); save_nominas(pd.concat([base,pd.DataFrame([row])], ignore_index=True)); st.success('Nómina guardada'); st.rerun()
-    ydf=load_nominas(); ydf=ydf[ydf['Anio']==year]
-    if not ydf.empty:
-        st.metric('Bruto anual', euro(ydf['Bruto'].sum())); st.dataframe(ydf, hide_index=True, use_container_width=True)
+        bruto_base=c[0].number_input('Bruto mensual', value=2166.67, step=.01, format='%.2f', key=f'nom_tpl_bruto_{year}')
+        ss_pct=c[1].number_input('% SS', value=4.85, step=.01, format='%.2f', key=f'nom_tpl_ss_{year}')
+        desempleo_pct=c[2].number_input('% Desempleo', value=1.65, step=.01, format='%.2f', key=f'nom_tpl_des_{year}')
+        irpf_pct=c[3].number_input('% IRPF', value=0.00, step=.01, format='%.2f', key=f'nom_tpl_irpf_{year}')
+        otros_base=c[4].number_input('Otros descuentos', value=0.00, step=.01, format='%.2f', key=f'nom_tpl_otros_{year}')
+        ss_base=bruto_base*ss_pct/100
+        des_base=bruto_base*desempleo_pct/100
+        irpf_base=bruto_base*irpf_pct/100
+        neto_base=bruto_base-ss_base-des_base-irpf_base-otros_base
+        st.info(f'Plantilla mensual: SS {euro(ss_base)} · Desempleo {euro(des_base)} · IRPF {euro(irpf_base)} · Neto esperado {euro(neto_base)}')
+        c1,c2=st.columns(2)
+        if c1.button('🧾 Generar / actualizar ENE-DIC', use_container_width=True, key=f'nom_generate_{year}'):
+            existing=df[df['Anio']==year].copy()
+            rows=[]
+            for mes in MONTHS_ES:
+                ex=existing[existing['Mes']==mes]
+                ingresado=float(money(ex.iloc[0]['Ingresado'])) if not ex.empty else 0.0
+                # Si ya existía una nómina, mantenemos el ingresado; el resto se actualiza con la plantilla.
+                rows.append({'Anio':year,'Mes':mes,'Bruto':bruto_base,'SS':ss_base,'Desempleo':des_base,'IRPF':irpf_base,'Otros':otros_base,'Ingresado':ingresado})
+            base=df[df['Anio']!=year].copy()
+            save_nominas(pd.concat([base,pd.DataFrame(rows)], ignore_index=True))
+            st.success('12 nóminas generadas. Ahora solo rellena el importe ingresado cada mes.')
+            st.rerun()
+        if c2.button('🗑️ Borrar nóminas del año', use_container_width=True, key=f'nom_delete_year_{year}'):
+            save_nominas(df[df['Anio']!=year].copy())
+            st.warning('Nóminas del año borradas.')
+            st.rerun()
+
+    ydf=ordered_nominas(load_nominas())
+    ydf=ydf[ydf['Anio']==year].copy()
+    if ydf.empty:
+        st.info('Aún no hay nóminas para este año. Genera las 12 desde la plantilla anterior.')
+    else:
+        total_cols=st.columns(4)
+        total_cols[0].metric('Bruto anual', euro(ydf['Bruto'].sum()))
+        total_cols[1].metric('Gastos deducibles', euro(ydf['SS'].sum()+ydf['Desempleo'].sum()))
+        total_cols[2].metric('Retenciones IRPF', euro(ydf['IRPF'].sum()))
+        total_cols[3].metric('Neto esperado anual', euro(ydf['NetoCalculado'].sum()))
+
+        st.subheader('Comprobación de nóminas')
+        view=ydf.copy()
+        view['Estado']=view['Diferencia'].apply(nomina_status)
+        ordered_cols=['Mes','Bruto','SS','Desempleo','IRPF','Otros','NetoCalculado','Ingresado','Diferencia','Estado']
+        view=view[ordered_cols]
+        fmt={c: euro for c in ['Bruto','SS','Desempleo','IRPF','Otros','NetoCalculado','Ingresado','Diferencia']}
+        st.dataframe(view.style.apply(style_nominas, axis=1).format(fmt), hide_index=True, use_container_width=True)
+
+        with st.expander('✏️ Editar nóminas / introducir ingresado', expanded=True):
+            edit=ydf[['Mes','Bruto','SS','Desempleo','IRPF','Otros','Ingresado']].copy().reset_index(drop=True)
+            edited=st.data_editor(
+                edit,
+                hide_index=True,
+                use_container_width=True,
+                num_rows='fixed',
+                key=f'nom_editor_{year}',
+                column_config={
+                    'Mes': st.column_config.TextColumn('Mes', disabled=True),
+                    'Bruto': st.column_config.NumberColumn('Bruto', format='%.2f'),
+                    'SS': st.column_config.NumberColumn('SS', format='%.2f'),
+                    'Desempleo': st.column_config.NumberColumn('Desempleo', format='%.2f'),
+                    'IRPF': st.column_config.NumberColumn('IRPF', format='%.2f'),
+                    'Otros': st.column_config.NumberColumn('Otros', format='%.2f'),
+                    'Ingresado': st.column_config.NumberColumn('Ingresado', format='%.2f'),
+                }
+            )
+            if st.button('💾 Guardar cambios de nóminas', use_container_width=True, key=f'nom_save_editor_{year}'):
+                edited['Anio']=year
+                for col in ['Bruto','SS','Desempleo','IRPF','Otros','Ingresado']:
+                    edited[col]=edited[col].apply(money)
+                base=df[df['Anio']!=year].copy()
+                save_nominas(pd.concat([base,edited[['Anio','Mes','Bruto','SS','Desempleo','IRPF','Otros','Ingresado']]], ignore_index=True))
+                st.success('Nóminas actualizadas.')
+                st.rerun()
+
     render_vacaciones(year)
 
 def easter(y):
