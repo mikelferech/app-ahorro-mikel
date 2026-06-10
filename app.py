@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.5.6"
+APP_VERSION = "0.5.7"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -23,29 +23,35 @@ st.set_page_config(page_title=APP_TITLE, page_icon="💰", layout="wide", initia
 
 st.markdown("""
 <style>
-.main .block-container {padding-top: 1.1rem; max-width: 1650px;}
-h1 {font-size: 2.4rem !important;}
-h2, h3 {font-size: 1.7rem !important;}
-[data-testid="stMetricLabel"] {font-size: 1rem !important;}
-[data-testid="stMetricValue"] {font-size: 2.25rem !important;}
-[data-testid="stMetricDelta"] {font-size: .95rem !important;}
-.stTabs [data-baseweb="tab"] p {font-size: 1rem !important; font-weight: 700 !important;}
-.stDataFrame, [data-testid="stDataFrame"] {font-size: 1rem !important;}
+.main .block-container {padding-top: 1.2rem; max-width: 1800px; font-size: 1.08rem;}
+h1 {font-size: 3.0rem !important;}
+h2 {font-size: 2.25rem !important;} h3 {font-size: 1.85rem !important;}
+[data-testid="stMetricLabel"] {font-size: 1.12rem !important; font-weight: 800 !important;}
+[data-testid="stMetricValue"] {font-size: 2.65rem !important;}
+[data-testid="stMetricDelta"] {font-size: 1.05rem !important;}
+.stTabs [data-baseweb="tab"] p {font-size: 1.12rem !important; font-weight: 800 !important;}
+.stDataFrame, [data-testid="stDataFrame"] {font-size: 1.08rem !important;}
+[data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [data-testid="stDataFrameResizable"] {background:#263244!important;color:#fff!important;font-weight:900!important;}
+[data-testid="stDataFrame"] div[role="columnheader"] {background:#263244!important;color:#fff!important;}
+thead tr th {background:#263244!important;color:#fff!important;}
+[data-testid="stDataFrame"] [role="gridcell"] {font-size:1.02rem!important;}
 .login-card {max-width:560px;margin:5rem auto 1rem auto;padding:1.8rem;border:1px solid rgba(128,128,128,.25);border-radius:24px;background:rgba(128,128,128,.06);text-align:center;}
 .login-card img {max-width:330px;width:85%;margin-bottom:1rem;}
 .header-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:1rem;}
 .brand{display:flex;align-items:center;gap:22px;}
-.brand img{height:54px;max-width:245px;object-fit:contain;}
-.brand h1{font-size:3.2rem!important;margin:0;line-height:1;}
+.brand img{height:64px;max-width:285px;object-fit:contain;}
+.brand h1{font-size:3.75rem!important;margin:0;line-height:1;}
 .userbox{text-align:right;min-width:150px;}
-.logout-icon button{font-size:1.2rem!important;padding:.25rem .6rem!important;min-height:34px!important;}
-.bank-chip{border-radius:10px;padding:9px 12px;color:white;font-weight:800;text-align:center;margin-bottom:8px;}
+.logout-inline{display:flex;align-items:center;justify-content:flex-end;gap:10px;}
+.logout-inline .user{font-weight:800;opacity:.85;}
+.logout-icon button{font-size:1.25rem!important;padding:.25rem .58rem!important;min-height:34px!important;}
+.bank-chip{border-radius:10px;padding:13px 14px;color:white;font-weight:900;text-align:center;margin-bottom:10px;font-size:1.15rem;}
 .row-card{border-bottom:1px solid rgba(128,128,128,.15);padding:.35rem 0;}
 .footer{margin-top:2rem;border-top:1px solid rgba(128,128,128,.22);padding:1rem 0 .2rem;display:flex;align-items:center;justify-content:center;gap:14px;opacity:.8;font-size:.86rem;}
 .footer img{height:24px;width:auto;}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:18px;}
 .cal-head{text-align:center;font-weight:900;opacity:.8;font-size:.78rem;}
-.cal-month-title{text-align:center;font-weight:900;margin:.5rem 0 .25rem;font-size:1rem}.cal-day{min-height:34px;border-radius:7px;text-align:center;padding:5px;border:1px solid rgba(128,128,128,.18);font-size:.86rem;}
+.cal-month-title{text-align:center;font-weight:900;margin:.6rem 0 .3rem;font-size:1.12rem}.cal-day{min-height:38px;border-radius:7px;text-align:center;padding:6px;border:1px solid rgba(128,128,128,.18);font-size:.96rem;}
 .cal-empty{opacity:.1}.cal-normal{background:rgba(128,128,128,.08)}.cal-red{background:#b91c1c;color:#fff}.cal-maroon{background:#5b1720;color:#fff}.cal-grey{background:#6b7280;color:#fff}.cal-green{background:#15803d;color:#fff;font-weight:900}
 .vadillo-box{background:#fff;border-radius:16px;padding:12px;border:1px solid rgba(128,128,128,.2);display:flex;align-items:center;justify-content:center;margin-bottom:1rem;}
 .vadillo-box img{max-height:78px;max-width:95%;object-fit:contain;}
@@ -85,6 +91,11 @@ def month_label(d):
     d=pd.to_datetime(d, errors='coerce')
     if pd.isna(d): return ''
     return f"{MONTHS_ES[d.month-1]}{str(d.year)[-2:]}"
+
+def date_label(d):
+    d=pd.to_datetime(d, errors='coerce')
+    if pd.isna(d): return ''
+    return f"{d.day:02d}-{MONTHS_ES[d.month-1]}-{str(d.year)[-2:]}"
 
 def month_date(label):
     label=str(label).strip().upper()
@@ -172,10 +183,11 @@ def login_gate():
     st.stop()
 
 def logout_button():
-    c1,c2=st.columns([7,1])
+    c1,c2=st.columns([7.5,1.5])
     with c2:
-        st.caption('👤 mikelferech')
-        if st.button('🚪', help='Cerrar sesión', key='logout_icon'):
+        a,b=st.columns([3,1])
+        a.markdown("<div class='logout-inline'><span class='user'>👤 mikelferech</span></div>", unsafe_allow_html=True)
+        if b.button('🚪', help='Cerrar sesión', key='logout_icon'):
             st.session_state.auth_ok=False; st.rerun()
 
 # ---------- data ----------
@@ -365,11 +377,11 @@ def charts(df, prefix="chart"):
     df=df.sort_values('Fecha').copy(); df['Mes']=df['Fecha'].apply(month_label)
     c1,c2=st.columns(2)
     fig=go.Figure(go.Scatter(x=df['Mes'], y=df['Total'], mode='lines+markers'))
-    fig.update_layout(title='Patrimonio histórico', height=360, margin=dict(l=15,r=15,t=45,b=15))
+    fig.update_layout(title='Patrimonio histórico', height=430, margin=dict(l=15,r=15,t=45,b=15))
     c1.plotly_chart(fig, use_container_width=True, key=f"{prefix}_patrimonio")
     colors=['#16a34a' if v>=0 else '#dc2626' for v in df['Diferencia']]
     fig2=go.Figure(go.Bar(x=df['Mes'], y=df['Diferencia'], marker_color=colors))
-    fig2.update_layout(title='+/- mensual', height=360, margin=dict(l=15,r=15,t=45,b=15))
+    fig2.update_layout(title='+/- mensual', height=430, margin=dict(l=15,r=15,t=45,b=15))
     c2.plotly_chart(fig2, use_container_width=True, key=f"{prefix}_diferencia")
 
 def render_dashboard():
@@ -502,28 +514,73 @@ def render_calendar(y, vac_days=set()):
 def render_vacaciones(year):
     st.subheader('🌴 Vacaciones y calendario laboral')
     vac=read_csv('vacaciones.csv', ['Anio','Inicio','Fin','Dias','Nota'])
-    if not vac.empty: vac['Anio']=pd.to_numeric(vac['Anio'], errors='coerce').fillna(year).astype(int)
-    used=money(vac[vac['Anio']==year]['Dias'].sum()) if not vac.empty else 0
+    if not vac.empty:
+        vac['Anio']=pd.to_numeric(vac['Anio'], errors='coerce').fillna(year).astype(int)
+        vac['Inicio']=pd.to_datetime(vac['Inicio'], errors='coerce').dt.date
+        vac['Fin']=pd.to_datetime(vac['Fin'], errors='coerce').dt.date
+        vac=vac.dropna(subset=['Inicio','Fin'])
+    yvac=vac[vac['Anio']==year].sort_values('Inicio') if not vac.empty else pd.DataFrame(columns=['Anio','Inicio','Fin','Dias','Nota'])
+    used=money(yvac['Dias'].sum()) if not yvac.empty else 0
     st.metric('Días restantes', f"{VACACIONES_ANUALES-used:g}", delta=f"Usados: {used:g}")
+
     with st.expander('➕ Añadir vacaciones', expanded=False):
         ini=st.date_input('Inicio', value=date(year, date.today().month, 1), min_value=date(year,1,1), max_value=date(year,12,31), key=f'vac_ini_{year}')
-        # Key dependiente de inicio: al cambiar inicio, el selector de fin se reposiciona desde esa fecha.
         fin=st.date_input('Fin', value=ini, min_value=ini, max_value=date(year,12,31), key=f'vac_fin_{year}_{ini.isoformat()}')
         calc=laboral_days_between(ini, fin, year)
         dias=st.number_input('Días computables', value=float(calc), step=.5, format='%.1f', help='Calculado automáticamente solo con laborables: excluye sábados, domingos y festivos. Puedes editarlo si hace falta.', key=f'vac_dias_{year}_{ini.isoformat()}_{fin.isoformat()}')
         nota=st.text_input('Nota', key=f'vac_nota_{year}_{ini.isoformat()}')
         if st.button('Guardar vacaciones', use_container_width=True, key=f'vac_save_{year}'):
-            row={'Anio':year,'Inicio':ini.isoformat(),'Fin':fin.isoformat(),'Dias':dias,'Nota':nota}; save_csv('vacaciones.csv', pd.concat([vac,pd.DataFrame([row])], ignore_index=True)); st.rerun()
-    yvac=vac[vac['Anio']==year] if not vac.empty else pd.DataFrame()
+            row={'Anio':year,'Inicio':ini.isoformat(),'Fin':fin.isoformat(),'Dias':dias,'Nota':nota}
+            save_csv('vacaciones.csv', pd.concat([vac,pd.DataFrame([row])], ignore_index=True))
+            st.rerun()
+
     vac_days=set()
     for _,r in yvac.iterrows():
-        a=pd.to_datetime(r['Inicio']).date(); b=pd.to_datetime(r['Fin']).date();
+        a=pd.to_datetime(r['Inicio']).date(); b=pd.to_datetime(r['Fin']).date()
         vac_days |= {a+timedelta(days=i) for i in range((b-a).days+1)}
     render_calendar(year, vac_days)
-    if not yvac.empty:
-        st.dataframe(yvac, hide_index=True, use_container_width=True)
+
+    st.markdown('**Periodos de vacaciones**')
+    if yvac.empty:
+        st.info('Aún no hay vacaciones registradas para este año.')
+    else:
+        disp=yvac.copy().sort_values('Inicio')
+        disp['Inicio']=disp['Inicio'].apply(date_label)
+        disp['Fin']=disp['Fin'].apply(date_label)
+        disp=disp[['Inicio','Fin','Dias','Nota']]
+        st.dataframe(disp, hide_index=True, use_container_width=True)
+        with st.expander('✏️ Editar / borrar vacaciones existentes', expanded=False):
+            for i,r in yvac.reset_index(drop=True).iterrows():
+                title=f"{date_label(r['Inicio'])} → {date_label(r['Fin'])} · {money(r['Dias']):g} días"
+                with st.container():
+                    st.markdown(f"**{title}**")
+                    c=st.columns([1.15,1.15,.8,1.8,.55,.55])
+                    ini2=c[0].date_input('Inicio', value=pd.to_datetime(r['Inicio']).date(), min_value=date(year,1,1), max_value=date(year,12,31), key=f'vac_edit_ini_{year}_{i}', label_visibility='collapsed')
+                    fin2=c[1].date_input('Fin', value=max(pd.to_datetime(r['Fin']).date(), ini2), min_value=ini2, max_value=date(year,12,31), key=f'vac_edit_fin_{year}_{i}_{ini2.isoformat()}', label_visibility='collapsed')
+                    calc2=laboral_days_between(ini2, fin2, year)
+                    dias2=c[2].number_input('Días', value=float(money(r['Dias']) if money(r['Dias']) else calc2), step=.5, format='%.1f', key=f'vac_edit_dias_{year}_{i}', label_visibility='collapsed')
+                    nota2=c[3].text_input('Nota', value='' if pd.isna(r.get('Nota','')) else str(r.get('Nota','')), key=f'vac_edit_nota_{year}_{i}', label_visibility='collapsed')
+                    if c[4].button('💾', key=f'vac_update_{year}_{i}', help='Guardar cambios'):
+                        allv=vac.copy().reset_index(drop=True)
+                        mask=(allv['Anio'].astype(int)==year)&(pd.to_datetime(allv['Inicio']).dt.date==pd.to_datetime(r['Inicio']).date())&(pd.to_datetime(allv['Fin']).dt.date==pd.to_datetime(r['Fin']).date())&(allv['Nota'].fillna('').astype(str)==str(r.get('Nota','')))
+                        idxs=allv[mask].index.tolist() or [yvac.index[i]]
+                        idx=idxs[0]
+                        allv.loc[idx, ['Anio','Inicio','Fin','Dias','Nota']] = [year, ini2.isoformat(), fin2.isoformat(), dias2, nota2]
+                        save_csv('vacaciones.csv', allv)
+                        st.rerun()
+                    if c[5].button('❌', key=f'vac_delete_{year}_{i}', help='Borrar periodo'):
+                        allv=vac.copy().reset_index(drop=True)
+                        mask=(allv['Anio'].astype(int)==year)&(pd.to_datetime(allv['Inicio']).dt.date==pd.to_datetime(r['Inicio']).date())&(pd.to_datetime(allv['Fin']).dt.date==pd.to_datetime(r['Fin']).date())&(allv['Nota'].fillna('').astype(str)==str(r.get('Nota','')))
+                        idxs=allv[mask].index.tolist() or [yvac.index[i]]
+                        allv=allv.drop(index=idxs[0])
+                        save_csv('vacaciones.csv', allv)
+                        st.rerun()
+                    st.divider()
+
     with st.expander('Editar festivos', expanded=False):
         f=load_festivos(year).reset_index(drop=True)
+        if not f.empty:
+            f['Fecha']=pd.to_datetime(f['Fecha'], errors='coerce').dt.date
         edited=st.data_editor(f, num_rows='dynamic', hide_index=True, use_container_width=True, key=f'fest_{year}')
         if st.button('Guardar festivos', use_container_width=True, key=f'fest_save_{year}'):
             allf=read_csv('festivos.csv', ['Anio','Fecha','Nombre','Activo']); allf=allf[pd.to_numeric(allf['Anio'], errors='coerce')!=year]
