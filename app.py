@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.5.7"
+APP_VERSION = "0.5.8"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -23,29 +23,35 @@ st.set_page_config(page_title=APP_TITLE, page_icon="💰", layout="wide", initia
 
 st.markdown("""
 <style>
-.main .block-container {padding-top: 1.2rem; max-width: 1800px; font-size: 1.08rem;}
-h1 {font-size: 3.0rem !important;}
-h2 {font-size: 2.25rem !important;} h3 {font-size: 1.85rem !important;}
-[data-testid="stMetricLabel"] {font-size: 1.12rem !important; font-weight: 800 !important;}
-[data-testid="stMetricValue"] {font-size: 2.65rem !important;}
-[data-testid="stMetricDelta"] {font-size: 1.05rem !important;}
-.stTabs [data-baseweb="tab"] p {font-size: 1.12rem !important; font-weight: 800 !important;}
-.stDataFrame, [data-testid="stDataFrame"] {font-size: 1.08rem !important;}
-[data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [data-testid="stDataFrameResizable"] {background:#263244!important;color:#fff!important;font-weight:900!important;}
-[data-testid="stDataFrame"] div[role="columnheader"] {background:#263244!important;color:#fff!important;}
-thead tr th {background:#263244!important;color:#fff!important;}
-[data-testid="stDataFrame"] [role="gridcell"] {font-size:1.02rem!important;}
-.login-card {max-width:560px;margin:5rem auto 1rem auto;padding:1.8rem;border:1px solid rgba(128,128,128,.25);border-radius:24px;background:rgba(128,128,128,.06);text-align:center;}
+.main .block-container {padding-top: 1.2rem; max-width: 1900px; font-size: 1.22rem;}
+html, body, .stApp {font-size:18px!important;}
+label, input, textarea, button, [data-testid="stWidgetLabel"] {font-size:1.08rem!important;}
+h1 {font-size: 3.75rem !important;}
+h2 {font-size: 2.75rem !important;} h3 {font-size: 2.15rem !important;}
+[data-testid="stHeader"] {height:0rem!important;}
+[data-testid="stMetricLabel"] {font-size: 1.30rem !important; font-weight: 900 !important;}
+[data-testid="stMetricValue"] {font-size: 3.20rem !important; line-height:1.05!important;}
+[data-testid="stMetricDelta"] {font-size: 1.18rem !important;}
+.stTabs [data-baseweb="tab"] {height:3.4rem!important; padding-left:1rem!important; padding-right:1rem!important;}
+.stTabs [data-baseweb="tab"] p, .stTabs [role="tab"] p {font-size: 1.28rem !important; font-weight: 900 !important;}
+[data-testid="stExpander"] summary p {font-size:1.22rem!important; font-weight:900!important;}
+.stDataFrame, [data-testid="stDataFrame"] {font-size: 1.20rem !important;}
+[data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [data-testid="stDataFrameResizable"] {background:#334155!important;color:#fff!important;font-weight:900!important;font-size:1.16rem!important;}
+[data-testid="stDataFrame"] div[role="columnheader"] {background:#334155!important;color:#fff!important;}
+thead tr th {background:#334155!important;color:#fff!important;font-size:1.16rem!important;}
+[data-testid="stDataFrame"] [role="gridcell"] {font-size:1.13rem!important;}
+.login-card {max-width:560px;margin:3.5rem auto 1rem auto;padding:1.8rem;border:1px solid rgba(128,128,128,.25);border-radius:24px;background:rgba(128,128,128,.06);text-align:center;}
 .login-card img {max-width:330px;width:85%;margin-bottom:1rem;}
+.login-wrap {max-width:620px;margin:0 auto;}
 .header-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:1rem;}
 .brand{display:flex;align-items:center;gap:22px;}
-.brand img{height:64px;max-width:285px;object-fit:contain;}
-.brand h1{font-size:3.75rem!important;margin:0;line-height:1;}
+.brand img{height:74px;max-width:330px;object-fit:contain;}
+.brand h1{font-size:4.25rem!important;margin:0;line-height:1;}
 .userbox{text-align:right;min-width:150px;}
 .logout-inline{display:flex;align-items:center;justify-content:flex-end;gap:10px;}
 .logout-inline .user{font-weight:800;opacity:.85;}
 .logout-icon button{font-size:1.25rem!important;padding:.25rem .58rem!important;min-height:34px!important;}
-.bank-chip{border-radius:10px;padding:13px 14px;color:white;font-weight:900;text-align:center;margin-bottom:10px;font-size:1.15rem;}
+.bank-chip{border-radius:10px;padding:16px 16px;color:white;font-weight:900;text-align:center;margin-bottom:12px;font-size:1.32rem;}
 .row-card{border-bottom:1px solid rgba(128,128,128,.15);padding:.35rem 0;}
 .footer{margin-top:2rem;border-top:1px solid rgba(128,128,128,.22);padding:1rem 0 .2rem;display:flex;align-items:center;justify-content:center;gap:14px;opacity:.8;font-size:.86rem;}
 .footer img{height:24px;width:auto;}
@@ -172,10 +178,14 @@ def login_gate():
     st.markdown(f"<div class='login-card'><img src='{img_src(MFE_LOGO)}'><h1>🔒 Ahorro Mikel</h1><p>Acceso privado</p></div>", unsafe_allow_html=True)
     if not u_ok or not p_ok:
         st.error('Faltan credenciales en Streamlit Secrets.'); st.code('[auth]\nusername = "mikelferech"\npassword = "TU_CONTRASEÑA"'); st.stop()
-    with st.form('login_form'):
-        u=st.text_input('Usuario')
-        p=st.text_input('Contraseña', type='password')
-        ok=st.form_submit_button('Entrar', use_container_width=True)
+    st.markdown("<div class='login-wrap'>", unsafe_allow_html=True)
+    c_left, c_mid, c_right = st.columns([1, 1.25, 1])
+    with c_mid:
+        with st.form('login_form'):
+            u=st.text_input('Usuario')
+            p=st.text_input('Contraseña', type='password')
+            ok=st.form_submit_button('Entrar', use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
     if ok:
         if str(u).strip()==u_ok.strip() and str(p)==p_ok:
             st.session_state.auth_ok=True; st.rerun()
@@ -377,11 +387,11 @@ def charts(df, prefix="chart"):
     df=df.sort_values('Fecha').copy(); df['Mes']=df['Fecha'].apply(month_label)
     c1,c2=st.columns(2)
     fig=go.Figure(go.Scatter(x=df['Mes'], y=df['Total'], mode='lines+markers'))
-    fig.update_layout(title='Patrimonio histórico', height=430, margin=dict(l=15,r=15,t=45,b=15))
+    fig.update_layout(title='Patrimonio histórico', height=500, margin=dict(l=15,r=15,t=45,b=15))
     c1.plotly_chart(fig, use_container_width=True, key=f"{prefix}_patrimonio")
     colors=['#16a34a' if v>=0 else '#dc2626' for v in df['Diferencia']]
     fig2=go.Figure(go.Bar(x=df['Mes'], y=df['Diferencia'], marker_color=colors))
-    fig2.update_layout(title='+/- mensual', height=430, margin=dict(l=15,r=15,t=45,b=15))
+    fig2.update_layout(title='+/- mensual', height=500, margin=dict(l=15,r=15,t=45,b=15))
     c2.plotly_chart(fig2, use_container_width=True, key=f"{prefix}_diferencia")
 
 def render_dashboard():
