@@ -10,16 +10,17 @@ import plotly.graph_objects as go
 import streamlit as st
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.6.1"
+APP_VERSION = "0.6.2"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
 MFE_LOGO = Path("mfe_cabecera.png")
+MFE_FAVICON = Path("mfe_favicon.png")
 VADILLO_LOGO = Path("vadillo.svg")
 MONTHS_ES = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"]
 VACACIONES_ANUALES = 23
 
-st.set_page_config(page_title=APP_TITLE, page_icon="💰", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title=APP_TITLE, page_icon=str(MFE_FAVICON) if MFE_FAVICON.exists() else "💰", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
@@ -758,8 +759,8 @@ def cuota_ahorro(base):
 def bonificacion(ri, gd):
     base=max(0,ri-gd)
     if base<=14800: return 8000
-    if base<=23000: return max(0,8000-0.6098*(base-14800))
-    return 0
+    if base<=23000: return max(3000,8000-0.6098*(base-14800))
+    return 3000
 
 def render_irpf():
     st.header('📄 IRPF')
