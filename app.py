@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.6.0"
+APP_VERSION = "0.6.1"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -62,7 +62,7 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.20rem
 .vadillo-box{background:#fff;border-radius:16px;padding:12px;border:1px solid rgba(128,128,128,.2);display:flex;align-items:center;justify-content:center;margin-bottom:1rem;}
 .vadillo-box img{max-height:78px;max-width:95%;object-fit:contain;}
 @media (prefers-color-scheme: dark){.vadillo-box{background:#111827}.vadillo-box img{filter: grayscale(1) brightness(0) invert(1);}}
-.irpf-table{width:100%;border-collapse:collapse;font-size:1.05rem}.irpf-table th{background:#2F3B4F;color:white;padding:9px;border-bottom:2px solid #ef4444}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
+.payroll-table{width:100%;border-collapse:collapse;font-size:1.08rem;table-layout:fixed}.payroll-table th{background:#2F3B4F;color:#fff;padding:8px 7px;border-bottom:2px solid #ef4444;text-align:right}.payroll-table th:first-child,.payroll-table td:first-child{text-align:left}.payroll-table td{padding:7px;border:1px solid rgba(128,128,128,.22);text-align:right;font-variant-numeric:tabular-nums}.payroll-ok{background:rgba(16,185,129,.18)}.payroll-warn{background:rgba(245,158,11,.16)}.payroll-bad{background:rgba(220,38,38,.20)}.payroll-income{background:rgba(59,130,246,.18)!important;color:#dbeafe!important;font-weight:900}.compact-editor [data-testid="stDataFrame"]{font-size:1.05rem!important}.irpf-table{width:100%;border-collapse:collapse;font-size:1.05rem}.irpf-table th{background:#2F3B4F;color:white;padding:9px;border-bottom:2px solid #ef4444}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
 </style>
 """, unsafe_allow_html=True)
 
@@ -314,6 +314,31 @@ def style_nominas(row):
         color='background-color: rgba(220, 38, 38, .18); color: inherit;'
     return [color for _ in row]
 
+def payroll_status_class(diff):
+    diff = money(diff)
+    if abs(diff) <= 0.01:
+        return 'payroll-ok'
+    if abs(diff) <= 1:
+        return 'payroll-warn'
+    return 'payroll-bad'
+
+def payroll_html(df):
+    cols = ['Mes','Bruto','SS','Desempleo','IRPF','Otros','NetoCalculado','Ingresado','Diferencia','Estado']
+    headers = ['Mes','Bruto','SS','Desempleo','IRPF','Otros','Neto','Ingresado','Dif.','Estado']
+    html = "<table class='payroll-table'><thead><tr>" + ''.join(f"<th>{h}</th>" for h in headers) + "</tr></thead><tbody>"
+    for _, r in df[cols].iterrows():
+        cls = payroll_status_class(r.get('Diferencia',0))
+        html += f"<tr class='{cls}'>"
+        for c in cols:
+            val = r.get(c, '')
+            cell_cls = ' class="payroll-income"' if c == 'Ingresado' else ''
+            if c in ['Bruto','SS','Desempleo','IRPF','Otros','NetoCalculado','Ingresado','Diferencia']:
+                val = euro(val)
+            html += f"<td{cell_cls}>{val}</td>"
+        html += "</tr>"
+    html += "</tbody></table>"
+    return html
+
 def ordered_nominas(df):
     order={m:i+1 for i,m in enumerate(MONTHS_ES)}
     if df.empty: return df
@@ -520,28 +545,33 @@ def render_nominas():
         view['Estado']=view['Diferencia'].apply(nomina_status)
         ordered_cols=['Mes','Bruto','SS','Desempleo','IRPF','Otros','NetoCalculado','Ingresado','Diferencia','Estado']
         view=view[ordered_cols]
-        fmt={c: euro for c in ['Bruto','SS','Desempleo','IRPF','Otros','NetoCalculado','Ingresado','Diferencia']}
-        st.dataframe(view.style.apply(style_nominas, axis=1).format(fmt), hide_index=True, use_container_width=True)
+        st.markdown(payroll_html(view), unsafe_allow_html=True)
 
         with st.expander('✏️ Editar nóminas / introducir ingresado', expanded=True):
+            st.caption('La columna 💙 Ingresado es la que normalmente rellenarás cada mes. El resto queda editable por si una nómina cambia.')
             edit=ydf[['Mes','Bruto','SS','Desempleo','IRPF','Otros','Ingresado']].copy().reset_index(drop=True)
+            edit=edit.rename(columns={'Ingresado':'💙 Ingresado'})
+            st.markdown('<div class="compact-editor">', unsafe_allow_html=True)
             edited=st.data_editor(
                 edit,
                 hide_index=True,
                 use_container_width=True,
                 num_rows='fixed',
+                height=470,
                 key=f'nom_editor_{year}',
                 column_config={
-                    'Mes': st.column_config.TextColumn('Mes', disabled=True),
-                    'Bruto': st.column_config.NumberColumn('Bruto', format='%.2f'),
-                    'SS': st.column_config.NumberColumn('SS', format='%.2f'),
-                    'Desempleo': st.column_config.NumberColumn('Desempleo', format='%.2f'),
-                    'IRPF': st.column_config.NumberColumn('IRPF', format='%.2f'),
-                    'Otros': st.column_config.NumberColumn('Otros', format='%.2f'),
-                    'Ingresado': st.column_config.NumberColumn('Ingresado', format='%.2f'),
+                    'Mes': st.column_config.TextColumn('Mes', disabled=True, width='small'),
+                    'Bruto': st.column_config.NumberColumn('Bruto', format='%.2f', width='small'),
+                    'SS': st.column_config.NumberColumn('SS', format='%.2f', width='small'),
+                    'Desempleo': st.column_config.NumberColumn('Desempleo', format='%.2f', width='small'),
+                    'IRPF': st.column_config.NumberColumn('IRPF', format='%.2f', width='small'),
+                    'Otros': st.column_config.NumberColumn('Otros', format='%.2f', width='small'),
+                    '💙 Ingresado': st.column_config.NumberColumn('💙 Ingresado', format='%.2f', width='small', help='Importe real que te han ingresado en banco'),
                 }
             )
+            st.markdown('</div>', unsafe_allow_html=True)
             if st.button('💾 Guardar cambios de nóminas', use_container_width=True, key=f'nom_save_editor_{year}'):
+                edited=edited.rename(columns={'💙 Ingresado':'Ingresado'})
                 edited['Anio']=year
                 for col in ['Bruto','SS','Desempleo','IRPF','Otros','Ingresado']:
                     edited[col]=edited[col].apply(money)
