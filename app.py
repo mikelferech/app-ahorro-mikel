@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.5.5"
+APP_VERSION = "0.5.6"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -23,14 +23,20 @@ st.set_page_config(page_title=APP_TITLE, page_icon="💰", layout="wide", initia
 
 st.markdown("""
 <style>
-.main .block-container {padding-top: 1.1rem; max-width: 1550px;}
-[data-testid="stMetricValue"] {font-size: 2rem;}
+.main .block-container {padding-top: 1.1rem; max-width: 1650px;}
+h1 {font-size: 2.4rem !important;}
+h2, h3 {font-size: 1.7rem !important;}
+[data-testid="stMetricLabel"] {font-size: 1rem !important;}
+[data-testid="stMetricValue"] {font-size: 2.25rem !important;}
+[data-testid="stMetricDelta"] {font-size: .95rem !important;}
+.stTabs [data-baseweb="tab"] p {font-size: 1rem !important; font-weight: 700 !important;}
+.stDataFrame, [data-testid="stDataFrame"] {font-size: 1rem !important;}
 .login-card {max-width:560px;margin:5rem auto 1rem auto;padding:1.8rem;border:1px solid rgba(128,128,128,.25);border-radius:24px;background:rgba(128,128,128,.06);text-align:center;}
 .login-card img {max-width:330px;width:85%;margin-bottom:1rem;}
 .header-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:1rem;}
 .brand{display:flex;align-items:center;gap:22px;}
 .brand img{height:54px;max-width:245px;object-fit:contain;}
-.brand h1{font-size:2.7rem;margin:0;line-height:1;}
+.brand h1{font-size:3.2rem!important;margin:0;line-height:1;}
 .userbox{text-align:right;min-width:150px;}
 .logout-icon button{font-size:1.2rem!important;padding:.25rem .6rem!important;min-height:34px!important;}
 .bank-chip{border-radius:10px;padding:9px 12px;color:white;font-weight:800;text-align:center;margin-bottom:8px;}
@@ -39,7 +45,7 @@ st.markdown("""
 .footer img{height:24px;width:auto;}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:18px;}
 .cal-head{text-align:center;font-weight:900;opacity:.8;font-size:.78rem;}
-.cal-day{min-height:34px;border-radius:7px;text-align:center;padding:5px;border:1px solid rgba(128,128,128,.18);font-size:.82rem;}
+.cal-month-title{text-align:center;font-weight:900;margin:.5rem 0 .25rem;font-size:1rem}.cal-day{min-height:34px;border-radius:7px;text-align:center;padding:5px;border:1px solid rgba(128,128,128,.18);font-size:.86rem;}
 .cal-empty{opacity:.1}.cal-normal{background:rgba(128,128,128,.08)}.cal-red{background:#b91c1c;color:#fff}.cal-maroon{background:#5b1720;color:#fff}.cal-grey{background:#6b7280;color:#fff}.cal-green{background:#15803d;color:#fff;font-weight:900}
 .vadillo-box{background:#fff;border-radius:16px;padding:12px;border:1px solid rgba(128,128,128,.2);display:flex;align-items:center;justify-content:center;margin-bottom:1rem;}
 .vadillo-box img{max-height:78px;max-width:95%;object-fit:contain;}
@@ -454,11 +460,23 @@ def load_festivos(y):
     df['Anio']=pd.to_numeric(df['Anio'], errors='coerce').fillna(y).astype(int); df['Activo']=df['Activo'].astype(str).str.lower().isin(['true','1','si','sí'])
     return df[df['Anio']==y].copy()
 
-def render_calendar(y, vac_days=set()):
-    fest=set(pd.to_datetime(load_festivos(y).query('Activo == True')['Fecha']).dt.date)
-    c1,c2=st.columns([1,2]); m=c1.selectbox('Mes calendario', list(range(1,13)), index=date.today().month-1, format_func=lambda x: MONTHS_ES[x-1], key=f'cal_m_{y}')
+def laboral_days_between(a, b, year):
+    """Días computables de vacaciones: lunes-viernes, excluyendo festivos activos."""
+    fest=set(pd.to_datetime(load_festivos(year).query('Activo == True')['Fecha'], errors='coerce').dt.date)
+    if b < a:
+        return 0
+    total=0
+    for i in range((b-a).days+1):
+        d=a+timedelta(days=i)
+        if d.weekday()<5 and d not in fest:
+            total += 1
+    return total
+
+def calendar_month_html(y, m, vac_days=set(), fest=None):
+    fest = fest or set(pd.to_datetime(load_festivos(y).query('Activo == True')['Fecha'], errors='coerce').dt.date)
     first=date(y,m,1); start=first-timedelta(days=first.weekday()); days=[start+timedelta(days=i) for i in range(42)]
-    html="<div class='cal-grid'>"+''.join(f"<div class='cal-head'>{d}</div>" for d in ['L','M','X','J','V','S','D'])
+    html=f"<div class='cal-month-title'>{MONTHS_ES[m-1]}{str(y)[-2:]}</div>"
+    html += "<div class='cal-grid'>" + ''.join(f"<div class='cal-head'>{d}</div>" for d in ['L','M','X','J','V','S','D'])
     for d in days:
         cls='cal-empty' if d.month!=m else 'cal-normal'
         if d.month==m:
@@ -467,7 +485,19 @@ def render_calendar(y, vac_days=set()):
             elif d.weekday()>=5: cls='cal-red'
             elif d.weekday()==4 or (d+timedelta(days=1)) in fest or date(y,6,1)<=d<=date(y,9,30): cls='cal-grey'
         html+=f"<div class='cal-day {cls}'>{d.day}</div>"
-    html+='</div>'; c2.markdown(html, unsafe_allow_html=True)
+    html+='</div>'
+    return html
+
+def render_calendar(y, vac_days=set()):
+    fest=set(pd.to_datetime(load_festivos(y).query('Activo == True')['Fecha'], errors='coerce').dt.date)
+    st.markdown('**Calendario anual**')
+    rows=[st.columns(3), st.columns(3), st.columns(3), st.columns(3)]
+    m=1
+    for row in rows:
+        for col in row:
+            with col:
+                st.markdown(calendar_month_html(y, m, vac_days, fest), unsafe_allow_html=True)
+                m += 1
 
 def render_vacaciones(year):
     st.subheader('🌴 Vacaciones y calendario laboral')
@@ -476,12 +506,13 @@ def render_vacaciones(year):
     used=money(vac[vac['Anio']==year]['Dias'].sum()) if not vac.empty else 0
     st.metric('Días restantes', f"{VACACIONES_ANUALES-used:g}", delta=f"Usados: {used:g}")
     with st.expander('➕ Añadir vacaciones', expanded=False):
-        ini=st.date_input('Inicio', value=date(year, date.today().month, 1), min_value=date(year,1,1), max_value=date(year,12,31), key='vac_ini')
-        fin=st.date_input('Fin', value=ini, min_value=ini, max_value=date(year,12,31), key='vac_fin')
-        calc=(fin-ini).days+1
-        dias=st.number_input('Días computables', value=float(calc), step=.5, format='%.1f')
-        nota=st.text_input('Nota')
-        if st.button('Guardar vacaciones', use_container_width=True):
+        ini=st.date_input('Inicio', value=date(year, date.today().month, 1), min_value=date(year,1,1), max_value=date(year,12,31), key=f'vac_ini_{year}')
+        # Key dependiente de inicio: al cambiar inicio, el selector de fin se reposiciona desde esa fecha.
+        fin=st.date_input('Fin', value=ini, min_value=ini, max_value=date(year,12,31), key=f'vac_fin_{year}_{ini.isoformat()}')
+        calc=laboral_days_between(ini, fin, year)
+        dias=st.number_input('Días computables', value=float(calc), step=.5, format='%.1f', help='Calculado automáticamente solo con laborables: excluye sábados, domingos y festivos. Puedes editarlo si hace falta.', key=f'vac_dias_{year}_{ini.isoformat()}_{fin.isoformat()}')
+        nota=st.text_input('Nota', key=f'vac_nota_{year}_{ini.isoformat()}')
+        if st.button('Guardar vacaciones', use_container_width=True, key=f'vac_save_{year}'):
             row={'Anio':year,'Inicio':ini.isoformat(),'Fin':fin.isoformat(),'Dias':dias,'Nota':nota}; save_csv('vacaciones.csv', pd.concat([vac,pd.DataFrame([row])], ignore_index=True)); st.rerun()
     yvac=vac[vac['Anio']==year] if not vac.empty else pd.DataFrame()
     vac_days=set()
@@ -494,7 +525,7 @@ def render_vacaciones(year):
     with st.expander('Editar festivos', expanded=False):
         f=load_festivos(year).reset_index(drop=True)
         edited=st.data_editor(f, num_rows='dynamic', hide_index=True, use_container_width=True, key=f'fest_{year}')
-        if st.button('Guardar festivos', use_container_width=True):
+        if st.button('Guardar festivos', use_container_width=True, key=f'fest_save_{year}'):
             allf=read_csv('festivos.csv', ['Anio','Fecha','Nombre','Activo']); allf=allf[pd.to_numeric(allf['Anio'], errors='coerce')!=year]
             save_csv('festivos.csv', pd.concat([allf,edited], ignore_index=True)); st.rerun()
 
