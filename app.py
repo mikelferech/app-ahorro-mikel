@@ -14,7 +14,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.6.4"
+APP_VERSION = "0.6.5"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -36,35 +36,35 @@ st.set_page_config(page_title=APP_TITLE, page_icon=get_page_icon(), layout="wide
 
 st.markdown("""
 <style>
-.main .block-container {padding-top: 1.2rem; max-width: 1900px; font-size: 1.22rem;}
-html, body, .stApp {font-size:18px!important;}
-label, input, textarea, button, [data-testid="stWidgetLabel"] {font-size:1.08rem!important;}
-h1 {font-size: 3.75rem !important;}
-h2 {font-size: 2.75rem !important;} h3 {font-size: 2.15rem !important;}
+.main .block-container {padding-top: .55rem; max-width: 1780px; font-size: 1.05rem;}
+html, body, .stApp {font-size:16px!important;}
+label, input, textarea, button, [data-testid="stWidgetLabel"] {font-size:1.00rem!important;}
+h1 {font-size: 2.65rem !important;}
+h2 {font-size: 2.05rem !important;} h3 {font-size: 1.55rem !important;}
 [data-testid="stHeader"] {height:0rem!important;}
-[data-testid="stMetricLabel"] {font-size: 1.30rem !important; font-weight: 900 !important;}
-[data-testid="stMetricValue"] {font-size: 3.20rem !important; line-height:1.05!important;}
-[data-testid="stMetricDelta"] {font-size: 1.18rem !important;}
-.stTabs [data-baseweb="tab"] {height:3.4rem!important; padding-left:1rem!important; padding-right:1rem!important;}
-.stTabs [data-baseweb="tab"] p, .stTabs [role="tab"] p {font-size: 1.28rem !important; font-weight: 900 !important;}
-[data-testid="stExpander"] summary p {font-size:1.22rem!important; font-weight:900!important;}
-.stDataFrame, [data-testid="stDataFrame"] {font-size: 1.20rem !important;}
-[data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [data-testid="stDataFrameResizable"] {background:#2F3B4F!important;color:#fff!important;font-weight:900!important;font-size:1.20rem!important;border-bottom:2px solid #ef4444!important;}
+[data-testid="stMetricLabel"] {font-size: 1.06rem !important; font-weight: 900 !important;}
+[data-testid="stMetricValue"] {font-size: 2.35rem !important; line-height:1.05!important;}
+[data-testid="stMetricDelta"] {font-size: 1.00rem !important;}
+.stTabs [data-baseweb="tab"] {height:2.75rem!important; padding-left:.75rem!important; padding-right:.75rem!important;}
+.stTabs [data-baseweb="tab"] p, .stTabs [role="tab"] p {font-size: 1.05rem !important; font-weight: 900 !important;}
+[data-testid="stExpander"] summary p {font-size:1.08rem!important; font-weight:900!important;}
+.stDataFrame, [data-testid="stDataFrame"] {font-size: 1.05rem !important;}
+[data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [data-testid="stDataFrameResizable"] {background:#2F3B4F!important;color:#fff!important;font-weight:900!important;font-size:1.05rem!important;border-bottom:2px solid #ef4444!important;}
 [data-testid="stDataFrame"] div[role="columnheader"] {background:#2F3B4F!important;color:#fff!important;}
-thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.20rem!important;border-bottom:2px solid #ef4444!important;}
-[data-testid="stDataFrame"] [role="gridcell"] {font-size:1.13rem!important;}
+thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem!important;border-bottom:2px solid #ef4444!important;}
+[data-testid="stDataFrame"] [role="gridcell"] {font-size:1.00rem!important;}
 .login-card {max-width:560px;margin:3.5rem auto 1rem auto;padding:1.8rem;border:1px solid rgba(128,128,128,.25);border-radius:24px;background:rgba(128,128,128,.06);text-align:center;}
 .login-card img {max-width:360px;width:88%;margin-bottom:.6rem;}
 .login-wrap {max-width:620px;margin:0 auto;}
 .header-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:.25rem;min-height:0;}
 .brand{display:flex;align-items:flex-start;gap:10px;}
-.brand img{height:92px;max-width:360px;object-fit:contain;}
+.brand img{height:64px;max-width:280px;object-fit:contain;}
 .brand h1{display:none!important;}
 .userbox{text-align:right;min-width:150px;margin-top:.1rem;}
 .logout-inline{display:flex;align-items:center;justify-content:flex-end;gap:10px;}
 .logout-inline .user{font-weight:800;opacity:.85;font-size:1rem;}
 .logout-icon button{font-size:1.25rem!important;padding:.25rem .58rem!important;min-height:34px!important;}
-.bank-chip{border-radius:10px;padding:16px 16px;color:white;font-weight:900;text-align:center;margin-bottom:12px;font-size:1.32rem;}
+.bank-chip{border-radius:10px;padding:10px 12px;color:white;font-weight:900;text-align:center;margin-bottom:10px;font-size:1.05rem;}
 .row-card{border-bottom:1px solid rgba(128,128,128,.15);padding:.35rem 0;}
 .footer{margin-top:2rem;border-top:1px solid rgba(128,128,128,.22);padding:1rem 0 .2rem;display:flex;align-items:center;justify-content:center;gap:14px;opacity:.8;font-size:.86rem;}
 .footer img{height:24px;width:auto;}
@@ -75,7 +75,7 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.20rem
 .vadillo-box{background:#fff;border-radius:16px;padding:12px;border:1px solid rgba(128,128,128,.2);display:flex;align-items:center;justify-content:center;margin-bottom:1rem;}
 .vadillo-box img{max-height:78px;max-width:95%;object-fit:contain;}
 @media (prefers-color-scheme: dark){.vadillo-box{background:#111827}.vadillo-box img{filter: grayscale(1) brightness(0) invert(1);}}
-.payroll-table{width:100%;border-collapse:collapse;font-size:1.08rem;table-layout:fixed}.payroll-table th{background:#2F3B4F;color:#fff;padding:8px 7px;border-bottom:2px solid #ef4444;text-align:right}.payroll-table th:first-child,.payroll-table td:first-child{text-align:left}.payroll-table td{padding:7px;border:1px solid rgba(128,128,128,.22);text-align:right;font-variant-numeric:tabular-nums}.payroll-ok{background:rgba(16,185,129,.18)}.payroll-warn{background:rgba(245,158,11,.16)}.payroll-bad{background:rgba(220,38,38,.20)}.payroll-income{background:rgba(59,130,246,.18)!important;color:#dbeafe!important;font-weight:900}.compact-editor [data-testid="stDataFrame"]{font-size:1.05rem!important}.irpf-table{width:100%;border-collapse:collapse;font-size:1.05rem}.irpf-table th{background:#2F3B4F;color:white;padding:9px;border-bottom:2px solid #ef4444}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
+.payroll-table{width:100%;border-collapse:collapse;font-size:1.00rem;table-layout:fixed}.payroll-table th{background:#2F3B4F;color:#fff;padding:6px 6px;border-bottom:2px solid #ef4444;text-align:right}.payroll-table th:first-child,.payroll-table td:first-child{text-align:left}.payroll-table td{padding:5px 6px;border:1px solid rgba(128,128,128,.22);text-align:right;font-variant-numeric:tabular-nums}.payroll-ok{background:rgba(16,185,129,.18)}.payroll-warn{background:rgba(245,158,11,.16)}.payroll-bad{background:rgba(220,38,38,.20)}.payroll-income{background:rgba(59,130,246,.18)!important;color:#dbeafe!important;font-weight:900}.compact-editor [data-testid="stDataFrame"]{font-size:.98rem!important}.irpf-table{width:100%;border-collapse:collapse;font-size:1.05rem}.irpf-table th{background:#2F3B4F;color:white;padding:9px;border-bottom:2px solid #ef4444}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
 </style>
 """, unsafe_allow_html=True)
 
@@ -141,29 +141,32 @@ def memory_store():
 def path(name): DATA.mkdir(exist_ok=True); return DATA/name
 
 def read_csv(name, columns=None):
-    store = memory_store()
-    if name in store:
-        df = store[name].copy()
-    else:
-        p=path(name)
-        if not p.exists():
+    # Lee siempre primero el CSV físico. Así evitamos datos obsoletos en caché y
+    # reforzamos que nóminas/vacaciones sobrevivan a reruns y refrescos normales.
+    p = path(name)
+    if p.exists():
+        try:
+            df = pd.read_csv(p)
+        except Exception:
             df = pd.DataFrame(columns=columns or [])
-        else:
-            try:
-                df=pd.read_csv(p)
-            except Exception:
-                df=pd.DataFrame(columns=columns or [])
-        store[name] = df.copy()
+    else:
+        df = pd.DataFrame(columns=columns or [])
     if columns:
         for c in columns:
             if c not in df: df[c]=None
+    memory_store()[name] = df.copy()
     return df.copy()
 
 def save_csv(name, df):
     DATA.mkdir(exist_ok=True)
     df = df.copy()
+    # Guardado atómico: escribe primero a temporal y luego reemplaza.
+    # Reduce riesgo de perder datos si Streamlit rerunea justo al guardar.
+    tmp = path(name + '.tmp')
+    final = path(name)
+    df.to_csv(tmp, index=False)
+    tmp.replace(final)
     memory_store()[name] = df.copy()
-    df.to_csv(path(name), index=False)
 
 def build_ahorro_from_saldos():
     """Carga el histórico bueno desde saldos.xlsx si el CSV no existe o está vacío."""
