@@ -10,12 +10,12 @@ import plotly.graph_objects as go
 import streamlit as st
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.5.0"
+APP_VERSION = "0.5.2"
 APP_UPDATED = "10/06/2026"
-DATA = Path("data")
-ASSETS = Path("assets")
-MFE_LOGO = ASSETS / "mfe_cabecera.png"
-VADILLO_LOGO = ASSETS / "vadillo.svg"
+DATA = Path(".")
+ASSETS = Path(".")
+MFE_LOGO = Path("mfe_cabecera.png")
+VADILLO_LOGO = Path("vadillo.svg")
 MONTHS_ES = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"]
 VACACIONES_ANUALES = 23
 
@@ -110,6 +110,39 @@ def save_csv(name, df):
     DATA.mkdir(exist_ok=True)
     df.to_csv(path(name), index=False)
 
+def build_ahorro_from_saldos():
+    """Carga el histórico bueno desde saldos.xlsx si el CSV no existe o está vacío."""
+    sx = Path("saldos.xlsx")
+    cols = ['Fecha','BBVA','Openbank','Cajamar','Otros','Total','Diferencia']
+    if not sx.exists():
+        return pd.DataFrame(columns=cols)
+    try:
+        raw = pd.read_excel(sx, sheet_name='Ahorro BBVA', header=None)
+        header_idx = None
+        for i in range(min(len(raw), 25)):
+            row = [str(x).strip().lower() for x in raw.iloc[i].tolist()]
+            if 'mes' in row and ('cuenta' in row or 'bbva' in row):
+                header_idx = i
+                break
+        if header_idx is None:
+            return pd.DataFrame(columns=cols)
+        df = pd.read_excel(sx, sheet_name='Ahorro BBVA', header=header_idx)
+        df = df.rename(columns={'Mes':'Fecha','Cuenta':'BBVA','Openbank':'Openbank','Cajamar':'Cajamar','Otros':'Otros'})
+        for c in ['Fecha','BBVA','Openbank','Cajamar','Otros']:
+            if c not in df: df[c] = 0 if c != 'Fecha' else None
+        df = df[['Fecha','BBVA','Openbank','Cajamar','Otros']].copy()
+        df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce').dt.date
+        df = df.dropna(subset=['Fecha'])
+        for c in ['BBVA','Openbank','Cajamar','Otros']:
+            df[c] = df[c].apply(money)
+        df = df.drop_duplicates('Fecha', keep='first').sort_values('Fecha')
+        df['Total'] = df[['BBVA','Openbank','Cajamar','Otros']].sum(axis=1)
+        df['Diferencia'] = df['Total'].diff().fillna(0)
+        return df[cols]
+    except Exception:
+        return pd.DataFrame(columns=cols)
+
+
 # ---------- auth ----------
 def secrets_auth():
     try: return str(st.secrets['auth']['username']), str(st.secrets['auth']['password'])
@@ -170,8 +203,15 @@ def bank_color(k):
     return '#6b7280' if r.empty else r.iloc[0]['Color']
 
 def load_ahorro():
-    keys=bank_keys(False); df=read_csv('ahorro.csv')
-    if df.empty: return pd.DataFrame(columns=['Fecha']+keys+['Total','Diferencia'])
+    keys=bank_keys(False)
+    p = path('ahorro.csv')
+    df = read_csv('ahorro.csv')
+    if df.empty or 'Fecha' not in df.columns:
+        df = build_ahorro_from_saldos()
+        if not df.empty:
+            save_csv('ahorro.csv', df)
+    if df.empty:
+        return pd.DataFrame(columns=['Fecha']+keys+['Total','Diferencia'])
     df['Fecha']=pd.to_datetime(df['Fecha'], errors='coerce').dt.date
     df=df.dropna(subset=['Fecha'])
     for k in keys:
@@ -252,29 +292,29 @@ def export_excel_bytes():
         read_csv('festivos.csv').to_excel(writer, sheet_name='Festivos', index=False)
     bio.seek(0); return bio.getvalue()
 
-def render_bank_config():
+def render_bank_config(prefix='bank'):
     with st.expander('⚙️ Configuración de bancos', expanded=False):
         cfg=load_banks().reset_index(drop=True)
         st.caption('Edita nombres, colores, orden, activa/oculta o añade bancos. Los datos históricos no se pierden.')
         rows=[]
         for i,r in cfg.iterrows():
             c=st.columns([1.1,1.8,1.3,.8,.8,.55])
-            clave=c[0].text_input('Clave', value=r['Clave'], key=f'bank_clave_{i}', label_visibility='collapsed')
-            nombre=c[1].text_input('Nombre', value=r['Nombre'], key=f'bank_nombre_{i}', label_visibility='collapsed')
-            color=c[2].color_picker('Color', value=str(r['Color']), key=f'bank_color_{i}', label_visibility='collapsed')
-            activo=c[3].checkbox('Activo', value=bool(r['Activo']), key=f'bank_act_{i}', label_visibility='collapsed')
-            orden=c[4].number_input('Orden', value=int(r['Orden']), step=1, key=f'bank_orden_{i}', label_visibility='collapsed')
-            borrar=c[5].button('❌', key=f'bank_del_{i}', help='Eliminar banco')
+            clave=c[0].text_input('Clave', value=r['Clave'], key=f'{prefix}_clave_{i}', label_visibility='collapsed')
+            nombre=c[1].text_input('Nombre', value=r['Nombre'], key=f'{prefix}_nombre_{i}', label_visibility='collapsed')
+            color=c[2].color_picker('Color', value=str(r['Color']), key=f'{prefix}_color_{i}', label_visibility='collapsed')
+            activo=c[3].checkbox('Activo', value=bool(r['Activo']), key=f'{prefix}_act_{i}', label_visibility='collapsed')
+            orden=c[4].number_input('Orden', value=int(r['Orden']), step=1, key=f'{prefix}_orden_{i}', label_visibility='collapsed')
+            borrar=c[5].button('❌', key=f'{prefix}_del_{i}', help='Eliminar banco')
             if not borrar:
                 rows.append({'Clave':safe_key(clave),'Nombre':nombre or clave,'Color':color,'Activo':activo,'Orden':orden})
         st.divider()
         c=st.columns([1.1,1.8,1.3,.8,.8])
-        n_clave=c[0].text_input('Nueva clave', key='new_bank_clave')
-        n_nombre=c[1].text_input('Nuevo nombre', key='new_bank_nombre')
-        n_color=c[2].color_picker('Nuevo color', value='#6b7280', key='new_bank_color')
-        n_act=c[3].checkbox('Mostrar', value=True, key='new_bank_act')
-        n_order=c[4].number_input('Orden nuevo', value=len(cfg)+1, step=1, key='new_bank_order')
-        if st.button('Guardar configuración de bancos', use_container_width=True):
+        n_clave=c[0].text_input('Nueva clave', key=f'{prefix}_new_clave')
+        n_nombre=c[1].text_input('Nuevo nombre', key=f'{prefix}_new_nombre')
+        n_color=c[2].color_picker('Nuevo color', value='#6b7280', key=f'{prefix}_new_color')
+        n_act=c[3].checkbox('Mostrar', value=True, key=f'{prefix}_new_act')
+        n_order=c[4].number_input('Orden nuevo', value=len(cfg)+1, step=1, key=f'{prefix}_new_order')
+        if st.button('Guardar configuración de bancos', use_container_width=True, key=f'{prefix}_save'):
             if n_clave or n_nombre:
                 rows.append({'Clave':safe_key(n_clave or n_nombre),'Nombre':n_nombre or n_clave,'Color':n_color,'Activo':n_act,'Orden':n_order})
             out=pd.DataFrame(rows).drop_duplicates('Clave', keep='last').sort_values('Orden')
@@ -316,7 +356,7 @@ def render_dashboard():
 
 def render_ahorro():
     st.header('💰 Ahorro')
-    df=load_ahorro(); kpis(df); render_bank_config()
+    df=load_ahorro(); kpis(df); render_bank_config("ahorro_banks")
     keys=bank_keys(True)
     with st.expander('➕ Añadir / actualizar mes', expanded=False):
         opts=month_options(2012, date.today().year+8)
@@ -443,16 +483,16 @@ def render_vacaciones(year):
 
 def render_intereses():
     st.header('🏦 Intereses')
-    render_bank_config(); df=load_intereses(); year=st.selectbox('Año', list(range(date.today().year-2,date.today().year+9)), index=2, key='int_year')
+    render_bank_config('intereses_banks'); df=load_intereses(); year=st.selectbox('Año', list(range(date.today().year-2,date.today().year+9)), index=2, key='int_year')
     with st.expander('➕ Añadir / actualizar interés', expanded=True):
         mes=st.selectbox('Mes', MONTHS_ES, index=date.today().month-1, key='int_mes')
         banco=st.selectbox('Banco', bank_keys(True), format_func=bank_name, key='int_banco')
         ex=df[(df['Anio']==year)&(df['Mes']==mes)&(df['Banco']==banco)]
         d=ex.iloc[0].to_dict() if not ex.empty else {}
         c=st.columns(3)
-        bruto=c[0].number_input('Interés bruto', value=float(money(d.get('InteresBruto',0))), step=.01, format='%.2f')
-        saldo=c[1].number_input('Saldo', value=float(money(d.get('Saldo',0))), step=.01, format='%.2f')
-        ingresado=c[2].number_input('Ingresado', value=float(money(d.get('Ingresado',0))), step=.01, format='%.2f')
+        bruto=c[0].number_input('Interés bruto', value=float(money(d.get('InteresBruto',0))), step=.01, format='%.2f', key=f'int_bruto_{year}_{mes}_{banco}')
+        saldo=c[1].number_input('Saldo', value=float(money(d.get('Saldo',0))), step=.01, format='%.2f', key=f'int_saldo_{year}_{mes}_{banco}')
+        ingresado=c[2].number_input('Ingresado', value=float(money(d.get('Ingresado',0))), step=.01, format='%.2f', key=f'int_ingresado_{year}_{mes}_{banco}')
         neto=bruto*0.81; st.info(f'Retención: {euro(bruto*.19)} · Neto esperado: {euro(neto)} · Diferencia: {euro(ingresado-neto)}')
         if st.button('Guardar interés', use_container_width=True):
             row={'Anio':year,'Mes':mes,'Banco':banco,'InteresBruto':bruto,'Saldo':saldo,'Ingresado':ingresado}
