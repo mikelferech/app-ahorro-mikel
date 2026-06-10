@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.5.4"
+APP_VERSION = "0.5.5"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -217,7 +217,7 @@ def load_ahorro():
         # Si no hay importes válidos, reconstruimos desde saldos.xlsx.
         total_cols=[c for c in keys if c in tmp.columns]
         if total_cols:
-            total=tmp[total_cols].applymap(money).sum(axis=1).sum()
+            total=tmp[total_cols].map(money).sum(axis=1).sum()
             if total <= 0:
                 return True
         return False
