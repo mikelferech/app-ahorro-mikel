@@ -2,6 +2,7 @@ import base64
 import calendar
 import io
 import re
+import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -9,12 +10,16 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 try:
+    import extra_streamlit_components as stx
+except Exception:
+    stx = None
+try:
     from PIL import Image
 except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.6.6"
+APP_VERSION = "0.6.7"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -49,6 +54,8 @@ h2 {font-size: 2.05rem !important;} h3 {font-size: 1.55rem !important;}
 
 .stTabs [aria-selected="true"] p, .stTabs [aria-selected="true"] {color:#00a2eb!important;}
 .stTabs [data-baseweb="tab-highlight"] {background-color:#00a2eb!important;}
+.stTabs [data-baseweb="tab"]:hover p, .stTabs [role="tab"]:hover p {color:#00a2eb!important;}
+.stTabs [data-baseweb="tab"]:hover {border-color:#00a2eb!important;}
 [data-testid="stDecoration"] {background:#00a2eb!important;}
 .stTabs [data-baseweb="tab"] p, .stTabs [role="tab"] p {font-size: 1.05rem !important; font-weight: 900 !important;}
 [data-testid="stExpander"] summary p {font-size:1.08rem!important; font-weight:900!important;}
@@ -141,12 +148,70 @@ def memory_store():
     # También se escribe a CSV para poder descargar copia.
     return {}
 
+@st.cache_resource
+def cookie_manager_resource():
+    if stx is None:
+        return None
+    try:
+        return stx.CookieManager()
+    except Exception:
+        return None
+
+COOKIE_BACKUP_FILES = {"nominas.csv", "vacaciones.csv"}
+
+def _df_to_json_payload(df):
+    try:
+        d = df.copy()
+        return d.to_json(orient="records", date_format="iso", force_ascii=False)
+    except Exception:
+        return "[]"
+
+def _df_from_json_payload(payload, columns=None):
+    if not payload:
+        return pd.DataFrame(columns=columns or [])
+    try:
+        data = json.loads(payload)
+        return pd.DataFrame(data)
+    except Exception:
+        return pd.DataFrame(columns=columns or [])
+
+def _cookie_key(name):
+    return "ahorro_mikel_" + name.replace(".", "_")
+
+def read_cookie_df(name, columns=None):
+    cm = cookie_manager_resource()
+    if cm is None:
+        return pd.DataFrame(columns=columns or [])
+    try:
+        val = cm.get(cookie=_cookie_key(name))
+        return _df_from_json_payload(val, columns)
+    except Exception:
+        return pd.DataFrame(columns=columns or [])
+
+def write_cookie_df(name, df):
+    cm = cookie_manager_resource()
+    if cm is None:
+        return
+    try:
+        cm.set(_cookie_key(name), _df_to_json_payload(df), expires_at=datetime.now()+timedelta(days=3650), key="set_"+_cookie_key(name)+"_"+str(len(df)))
+    except Exception:
+        pass
+
 # ---------- csv storage ----------
 def path(name): DATA.mkdir(exist_ok=True); return DATA/name
 
 def read_csv(name, columns=None):
-    # Lee siempre primero el CSV físico. Así evitamos datos obsoletos en caché y
-    # reforzamos que nóminas/vacaciones sobrevivan a reruns y refrescos normales.
+    # Para nóminas y vacaciones usamos copia de respaldo en cookie/local navegador.
+    # Esto evita que se pierdan al refrescar o tras algunos redeploys de Streamlit.
+    if name in COOKIE_BACKUP_FILES:
+        cookie_df = read_cookie_df(name, columns)
+        if not cookie_df.empty:
+            if columns:
+                for c in columns:
+                    if c not in cookie_df: cookie_df[c]=None
+            memory_store()[name] = cookie_df.copy()
+            return cookie_df.copy()
+
     p = path(name)
     if p.exists():
         try:
@@ -164,13 +229,13 @@ def read_csv(name, columns=None):
 def save_csv(name, df):
     DATA.mkdir(exist_ok=True)
     df = df.copy()
-    # Guardado atómico: escribe primero a temporal y luego reemplaza.
-    # Reduce riesgo de perder datos si Streamlit rerunea justo al guardar.
     tmp = path(name + '.tmp')
     final = path(name)
     df.to_csv(tmp, index=False)
     tmp.replace(final)
     memory_store()[name] = df.copy()
+    if name in COOKIE_BACKUP_FILES:
+        write_cookie_df(name, df)
 
 def build_ahorro_from_saldos():
     """Carga el histórico bueno desde saldos.xlsx si el CSV no existe o está vacío."""
