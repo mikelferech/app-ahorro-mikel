@@ -384,8 +384,20 @@ def load_app_ahorro() -> pd.DataFrame:
     df=load_table("App_Ahorro", headers)
     if df.empty:
         df=extract_original_ahorro()
-        if not df.empty: save_ahorro(df)
-        return df
+        if df.empty:
+            return pd.DataFrame(columns=headers)
+        for k in keys:
+            if k not in df:
+                df[k]=0.0
+            df[k]=df[k].apply(money)
+        df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce").dt.date
+        df=df.dropna(subset=["Fecha"])
+        df["Fecha"] = df["Fecha"].apply(normalize_month)
+        df=df.drop_duplicates("Fecha", keep="last").sort_values("Fecha")
+        df["Total"] = df[keys].sum(axis=1)
+        df["+/-"] = df["Total"].diff().fillna(0)
+        save_ahorro(df)
+        return df[["Fecha"]+keys+["Total","+/-"]]
     df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce").dt.date
     df=df.dropna(subset=["Fecha"])
     df["Fecha"] = df["Fecha"].apply(normalize_month)
@@ -844,13 +856,17 @@ tabs=st.tabs(["Dashboard","Ahorro","Nóminas","Intereses","IRPF"])
 with tabs[0]:
     st.header("📊 Dashboard")
     df=load_app_ahorro(); kpi_dashboard(df)
-    if not df.empty:
-        chart=df.sort_values("Fecha").copy(); chart["Mes"]=chart["Fecha"].apply(mes_label)
-        c1,c2=st.columns(2)
-        with c1:
-            fig=go.Figure(go.Scatter(x=chart["Mes"], y=chart["Total"], mode="lines+markers")); fig.update_layout(title="Patrimonio histórico", height=360); st.plotly_chart(fig, use_container_width=True)
-        with c2:
-            colors=["#16a34a" if v>=0 else "#dc2626" for v in chart["+/-"]]; fig2=go.Figure(go.Bar(x=chart["Mes"], y=chart["+/-"], marker_color=colors)); fig2.update_layout(title="+/- mensual", height=360); st.plotly_chart(fig2, use_container_width=True)
+    required_cols={"Fecha","Total","+/-"}
+    if not df.empty and required_cols.issubset(set(df.columns)):
+        chart=df.dropna(subset=["Fecha"]).sort_values("Fecha").copy()
+        chart=chart[chart["Total"].apply(money)>0]
+        if not chart.empty:
+            chart["Mes"]=chart["Fecha"].apply(mes_label)
+            c1,c2=st.columns(2)
+            with c1:
+                fig=go.Figure(go.Scatter(x=chart["Mes"], y=chart["Total"], mode="lines+markers")); fig.update_layout(title="Patrimonio histórico", height=360); st.plotly_chart(fig, use_container_width=True)
+            with c2:
+                colors=["#16a34a" if v>=0 else "#dc2626" for v in chart["+/-"]]; fig2=go.Figure(go.Bar(x=chart["Mes"], y=chart["+/-"], marker_color=colors)); fig2.update_layout(title="+/- mensual", height=360); st.plotly_chart(fig2, use_container_width=True)
 with tabs[1]: render_ahorro()
 with tabs[2]: render_nominas()
 with tabs[3]: render_intereses()
