@@ -8,9 +8,13 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+try:
+    from PIL import Image
+except Exception:
+    Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.6.2"
+APP_VERSION = "0.6.3"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -20,7 +24,15 @@ VADILLO_LOGO = Path("vadillo.svg")
 MONTHS_ES = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"]
 VACACIONES_ANUALES = 23
 
-st.set_page_config(page_title=APP_TITLE, page_icon=str(MFE_FAVICON) if MFE_FAVICON.exists() else "💰", layout="wide", initial_sidebar_state="collapsed")
+def get_page_icon():
+    if Image is not None and MFE_FAVICON.exists():
+        try:
+            return Image.open(MFE_FAVICON)
+        except Exception:
+            return "💰"
+    return "💰"
+
+st.set_page_config(page_title=APP_TITLE, page_icon=get_page_icon(), layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
@@ -118,20 +130,39 @@ def safe_key(s):
 
 def rerun(): st.rerun()
 
+# ---------- lightweight persistent store ----------
+@st.cache_resource
+def memory_store():
+    # Persiste datos entre reruns/refresh mientras el servidor Streamlit siga activo.
+    # También se escribe a CSV para poder descargar copia.
+    return {}
+
 # ---------- csv storage ----------
 def path(name): DATA.mkdir(exist_ok=True); return DATA/name
 
 def read_csv(name, columns=None):
-    p=path(name)
-    if not p.exists(): return pd.DataFrame(columns=columns or [])
-    df=pd.read_csv(p)
+    store = memory_store()
+    if name in store:
+        df = store[name].copy()
+    else:
+        p=path(name)
+        if not p.exists():
+            df = pd.DataFrame(columns=columns or [])
+        else:
+            try:
+                df=pd.read_csv(p)
+            except Exception:
+                df=pd.DataFrame(columns=columns or [])
+        store[name] = df.copy()
     if columns:
         for c in columns:
             if c not in df: df[c]=None
-    return df
+    return df.copy()
 
 def save_csv(name, df):
     DATA.mkdir(exist_ok=True)
+    df = df.copy()
+    memory_store()[name] = df.copy()
     df.to_csv(path(name), index=False)
 
 def build_ahorro_from_saldos():
@@ -437,11 +468,34 @@ def charts(df, prefix="chart"):
     df=df.sort_values('Fecha').copy(); df['Mes']=df['Fecha'].apply(month_label)
     c1,c2=st.columns(2)
     fig=go.Figure(go.Scatter(x=df['Mes'], y=df['Total'], mode='lines+markers'))
-    fig.update_layout(title='Patrimonio histórico', height=500, margin=dict(l=15,r=15,t=45,b=15))
+    fig.update_layout(title='Patrimonio histórico', height=520, margin=dict(l=15,r=15,t=45,b=15))
     c1.plotly_chart(fig, use_container_width=True, key=f"{prefix}_patrimonio")
-    colors=['#16a34a' if v>=0 else '#dc2626' for v in df['Diferencia']]
-    fig2=go.Figure(go.Bar(x=df['Mes'], y=df['Diferencia'], marker_color=colors))
-    fig2.update_layout(title='+/- mensual', height=500, margin=dict(l=15,r=15,t=45,b=15))
+
+    mode = c2.selectbox('Vista +/- mensual', ['Marcar gasto extraordinario', 'Zoom normal', 'Completa'], key=f'{prefix}_diff_mode')
+    diffs = df['Diferencia'].astype(float)
+    colors=['#16a34a' if v>=0 else '#dc2626' for v in diffs]
+    fig2=go.Figure(go.Bar(x=df['Mes'], y=diffs, marker_color=colors, customdata=diffs, hovertemplate='%{x}<br>%{customdata:,.2f} €<extra></extra>'))
+    title='+/- mensual'
+    normal = diffs.copy()
+    if len(normal) > 6:
+        q1=normal.quantile(.25); q3=normal.quantile(.75); iqr=q3-q1
+        low=q1-3*iqr; high=q3+3*iqr
+        no_out=normal[(normal>=low)&(normal<=high)]
+    else:
+        no_out=normal
+    if no_out.empty: no_out=normal
+    if mode in ['Marcar gasto extraordinario','Zoom normal'] and len(no_out)>0:
+        pad=max(500, (no_out.max()-no_out.min())*.20)
+        ymin=min(no_out.min()-pad, -500)
+        ymax=max(no_out.max()+pad, 500)
+        fig2.update_yaxes(range=[ymin,ymax])
+        title += ' · zoom'
+    if mode=='Marcar gasto extraordinario' and len(diffs)>0:
+        threshold = min(-10000, no_out.min() - max(1000, abs(no_out.std())*2 if len(no_out)>1 else 1000))
+        outliers=df[diffs < threshold]
+        for _,r in outliers.iterrows():
+            fig2.add_annotation(x=r['Mes'], y=min(no_out.min() if not no_out.empty else 0, 0), text='⬇️ Gasto extraordinario', showarrow=True, arrowhead=2, ax=0, ay=-55, font=dict(size=12, color='#fca5a5'))
+    fig2.update_layout(title=title, height=520, margin=dict(l=15,r=15,t=45,b=15))
     c2.plotly_chart(fig2, use_container_width=True, key=f"{prefix}_diferencia")
 
 def render_dashboard():
