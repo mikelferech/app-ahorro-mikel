@@ -14,7 +14,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.6.3"
+APP_VERSION = "0.6.4"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -54,15 +54,15 @@ h2 {font-size: 2.75rem !important;} h3 {font-size: 2.15rem !important;}
 thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.20rem!important;border-bottom:2px solid #ef4444!important;}
 [data-testid="stDataFrame"] [role="gridcell"] {font-size:1.13rem!important;}
 .login-card {max-width:560px;margin:3.5rem auto 1rem auto;padding:1.8rem;border:1px solid rgba(128,128,128,.25);border-radius:24px;background:rgba(128,128,128,.06);text-align:center;}
-.login-card img {max-width:330px;width:85%;margin-bottom:1rem;}
+.login-card img {max-width:360px;width:88%;margin-bottom:.6rem;}
 .login-wrap {max-width:620px;margin:0 auto;}
-.header-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:1rem;}
-.brand{display:flex;align-items:center;gap:22px;}
-.brand img{height:74px;max-width:330px;object-fit:contain;}
-.brand h1{font-size:4.25rem!important;margin:0;line-height:1;}
-.userbox{text-align:right;min-width:150px;}
+.header-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:.25rem;min-height:0;}
+.brand{display:flex;align-items:flex-start;gap:10px;}
+.brand img{height:92px;max-width:360px;object-fit:contain;}
+.brand h1{display:none!important;}
+.userbox{text-align:right;min-width:150px;margin-top:.1rem;}
 .logout-inline{display:flex;align-items:center;justify-content:flex-end;gap:10px;}
-.logout-inline .user{font-weight:800;opacity:.85;}
+.logout-inline .user{font-weight:800;opacity:.85;font-size:1rem;}
 .logout-icon button{font-size:1.25rem!important;padding:.25rem .58rem!important;min-height:34px!important;}
 .bank-chip{border-radius:10px;padding:16px 16px;color:white;font-weight:900;text-align:center;margin-bottom:12px;font-size:1.32rem;}
 .row-card{border-bottom:1px solid rgba(128,128,128,.15);padding:.35rem 0;}
@@ -207,7 +207,7 @@ def login_gate():
     u_ok,p_ok=secrets_auth()
     if 'auth_ok' not in st.session_state: st.session_state.auth_ok=False
     if st.session_state.auth_ok: return
-    st.markdown(f"<div class='login-card'><img src='{img_src(MFE_LOGO)}'><h1>🔒 Ahorro Mikel</h1><p>Acceso privado</p></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='login-card'><img src='{img_src(MFE_LOGO)}'><p style='font-size:1.4rem;font-weight:900;margin:.2rem 0'>🔒 Acceso privado</p></div>", unsafe_allow_html=True)
     if not u_ok or not p_ok:
         st.error('Faltan credenciales en Streamlit Secrets.'); st.code('[auth]\nusername = "mikelferech"\npassword = "TU_CONTRASEÑA"'); st.stop()
     st.markdown("<div class='login-wrap'>", unsafe_allow_html=True)
@@ -400,7 +400,7 @@ def save_intereses(df): save_csv('intereses.csv', calc_intereses(df))
 # ---------- views ----------
 def header():
     st.markdown(f"""
-    <div class='header-row'><div class='brand'><img src='{img_src(MFE_LOGO)}'><h1>💰 Ahorro Mikel</h1></div><div></div></div>
+    <div class='header-row'><div class='brand'><img src='{img_src(MFE_LOGO)}'></div><div></div></div>
     """, unsafe_allow_html=True)
     logout_button()
 
@@ -494,7 +494,7 @@ def charts(df, prefix="chart"):
         threshold = min(-10000, no_out.min() - max(1000, abs(no_out.std())*2 if len(no_out)>1 else 1000))
         outliers=df[diffs < threshold]
         for _,r in outliers.iterrows():
-            fig2.add_annotation(x=r['Mes'], y=min(no_out.min() if not no_out.empty else 0, 0), text='⬇️ Gasto extraordinario', showarrow=True, arrowhead=2, ax=0, ay=-55, font=dict(size=12, color='#fca5a5'))
+            fig2.add_annotation(x=r['Mes'], y=0.04, yref='paper', text='⬇️ Gasto extraordinario', showarrow=False, font=dict(size=13, color='#fca5a5'), bgcolor='rgba(17,24,39,.65)', bordercolor='rgba(252,165,165,.5)', borderwidth=1)
     fig2.update_layout(title=title, height=520, margin=dict(l=15,r=15,t=45,b=15))
     c2.plotly_chart(fig2, use_container_width=True, key=f"{prefix}_diferencia")
 
@@ -612,7 +612,7 @@ def render_nominas():
                 hide_index=True,
                 use_container_width=True,
                 num_rows='fixed',
-                height=470,
+                height=620,
                 key=f'nom_editor_{year}',
                 column_config={
                     'Mes': st.column_config.TextColumn('Mes', disabled=True, width='small'),
