@@ -27,13 +27,16 @@ st.markdown("""
     div[data-testid="stMetricValue"] {font-size: 2.0rem;}
     .brand-card {border-radius: 14px; padding: 18px; margin-bottom: 14px; border: 1px solid rgba(255,255,255,.12);}
     .brand-title {font-weight: 800; font-size: 1.05rem; margin-bottom: .3rem;}
-    .bank-header {display:flex; align-items:center; justify-content:center; min-height:80px; border-radius:16px; padding: 10px; margin-bottom:8px;}
-    .bank-header img {max-height:58px; max-width: 90%; object-fit: contain;}
+    .bank-chip {border-radius:10px; padding:8px 12px; font-weight:800; text-align:center; color:#fff; margin-bottom:8px;}
     .bbva-bg {background:#072146;}
-    .openbank-bg {background:#f7f2f4;}
-    .cajamar-bg {background:#052b2f;}
-    .vadillo-box {background:#f5f7fb; border-radius:18px; padding:14px; display:flex; align-items:center; justify-content:center; margin-bottom:16px;}
-    .vadillo-box img {max-height:110px; max-width:95%; object-fit: contain;}
+    .openbank-bg {background:#e40046;}
+    .cajamar-bg {background:#008c95;}
+    .vadillo-box {background:#ffffff; border-radius:18px; padding:14px; display:flex; align-items:center; justify-content:center; margin-bottom:16px; border:1px solid rgba(0,0,0,.08);}
+    .vadillo-box img {max-height:95px; max-width:95%; object-fit: contain;}
+    @media (prefers-color-scheme: dark) {
+        .vadillo-box {background:#111827; border-color:rgba(255,255,255,.12);}
+        .vadillo-box img {filter: grayscale(1) brightness(0) invert(1);}
+    }
     .login-box {max-width: 460px; margin: 5rem auto 1rem auto; padding: 2rem; border-radius: 18px; border:1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04);}
     .cal-grid {display:grid; grid-template-columns: repeat(7, 1fr); gap:4px; margin-bottom:18px;}
     .cal-head {text-align:center; font-weight:800; font-size:.78rem; opacity:.75;}
@@ -125,13 +128,65 @@ def easter_date(year: int) -> date:
     day = ((h + l - 7*m + 114) % 31) + 1
     return date(year, month, day)
 
-def festivos_vitoria(year: int) -> set:
+def festivos_vitoria_base(year: int) -> pd.DataFrame:
     e = easter_date(year)
-    # Nacionales + habituales Euskadi/Álava/Vitoria. Editable en código si cambia calendario oficial.
-    fixed = [(1,1),(1,6),(4,28),(5,1),(7,25),(8,5),(8,15),(10,12),(11,1),(12,6),(12,8),(12,25)]
-    days = {date(year,m,d) for m,d in fixed}
-    days.update({e - timedelta(days=2), e + timedelta(days=1)})  # Viernes Santo y Lunes de Pascua
-    return days
+    rows = []
+    fixed = [
+        (1,1,"Año Nuevo"), (1,6,"Reyes"), (4,28,"San Prudencio"), (5,1,"Día del Trabajo"),
+        (7,25,"Santiago"), (8,5,"Virgen Blanca"), (8,15,"Asunción"), (10,12,"Fiesta Nacional"),
+        (11,1,"Todos los Santos"), (12,6,"Constitución"), (12,8,"Inmaculada"), (12,25,"Navidad")
+    ]
+    for m, d, name in fixed:
+        rows.append({"Año": year, "Fecha": date(year, m, d).isoformat(), "Nombre": name, "Activo": True, "Origen": "Base"})
+    rows.append({"Año": year, "Fecha": (e - timedelta(days=2)).isoformat(), "Nombre": "Viernes Santo", "Activo": True, "Origen": "Base"})
+    rows.append({"Año": year, "Fecha": (e + timedelta(days=1)).isoformat(), "Nombre": "Lunes de Pascua", "Activo": True, "Origen": "Base"})
+    return pd.DataFrame(rows)
+
+def load_festivos_df(year: int) -> pd.DataFrame:
+    headers = ["Año", "Fecha", "Nombre", "Activo", "Origen"]
+    saved = load_table("App_Festivos", headers)
+    saved_y = saved[pd.to_numeric(saved.get("Año"), errors="coerce") == year].copy() if not saved.empty else pd.DataFrame(columns=headers)
+    if saved_y.empty:
+        base = festivos_vitoria_base(year)
+        all_df = pd.concat([saved, base], ignore_index=True) if not saved.empty else base
+        save_table("App_Festivos", all_df)
+        return base
+    for c in headers:
+        if c not in saved_y:
+            saved_y[c] = None
+    return saved_y[headers]
+
+def festivos_vitoria(year: int) -> set:
+    df = load_festivos_df(year)
+    if df.empty:
+        return set()
+    out = set()
+    for _, r in df.iterrows():
+        activo = r.get("Activo", True)
+        if isinstance(activo, str):
+            activo = activo.strip().lower() not in ("false", "0", "no", "n", "")
+        if not activo:
+            continue
+        try:
+            out.add(pd.to_datetime(r.get("Fecha")).date())
+        except Exception:
+            pass
+    return out
+
+def save_festivos_year(year: int, df_year: pd.DataFrame):
+    headers = ["Año", "Fecha", "Nombre", "Activo", "Origen"]
+    current = load_table("App_Festivos", headers)
+    other = current[pd.to_numeric(current.get("Año"), errors="coerce") != year].copy() if not current.empty else pd.DataFrame(columns=headers)
+    clean = df_year.copy()
+    for h in headers:
+        if h not in clean: clean[h] = None
+    clean["Año"] = year
+    clean["Fecha"] = pd.to_datetime(clean["Fecha"], errors="coerce").dt.date.apply(lambda x: x.isoformat() if pd.notna(x) else "")
+    clean["Nombre"] = clean["Nombre"].fillna("")
+    clean["Activo"] = clean["Activo"].fillna(True)
+    clean["Origen"] = clean["Origen"].fillna("Manual")
+    clean = clean[clean["Fecha"] != ""]
+    save_table("App_Festivos", pd.concat([other, clean[headers]], ignore_index=True))
 
 def is_intensiva(day: date, festivos: set) -> bool:
     return day.weekday() == 4 or (day + timedelta(days=1) in festivos) or (date(day.year,6,1) <= day <= date(day.year,9,30))
@@ -275,12 +330,23 @@ def login_gate():
         st.stop()
 
 # ------------------ UI ------------------
-def bank_logo_block(css, logo, fallback):
-    src = image_html(ASSETS / logo)
-    if src:
-        st.markdown(f'<div class="bank-header {css}"><img src="{src}" alt="{fallback}"></div>', unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div class="bank-header {css}"><h2>{fallback}</h2></div>', unsafe_allow_html=True)
+def bank_chip(css, label):
+    st.markdown(f'<div class="bank-chip {css}">{label}</div>', unsafe_allow_html=True)
+
+def style_saldos_table(df):
+    def col_style(col):
+        if col.name == "BBVA":
+            return ["background-color:#072146;color:white;font-weight:700" for _ in col]
+        if col.name == "Openbank":
+            return ["background-color:#e40046;color:white;font-weight:700" for _ in col]
+        if col.name == "Cajamar":
+            return ["background-color:#008c95;color:white;font-weight:700" for _ in col]
+        return ["" for _ in col]
+    return df.style.apply(col_style, axis=0).set_table_styles([
+        {"selector":"th.col_heading.level0.col2", "props":"background-color:#072146;color:white;"},
+        {"selector":"th.col_heading.level0.col3", "props":"background-color:#e40046;color:white;"},
+        {"selector":"th.col_heading.level0.col4", "props":"background-color:#008c95;color:white;"},
+    ], overwrite=False)
 
 def kpi_dashboard(df):
     valid = df.dropna(subset=["Fecha"]).copy()
@@ -346,18 +412,16 @@ def render_ahorro():
 
     st.subheader("Saldos por banco")
     c1,c2,c3 = st.columns(3)
-    with c1:
-        bank_logo_block("bbva-bg", "bbva.jpg", "BBVA")
-    with c2:
-        bank_logo_block("openbank-bg", "openbank.jpg", "Openbank")
-    with c3:
-        bank_logo_block("cajamar-bg", "cajamar.png", "Cajamar")
+    with c1: bank_chip("bbva-bg", "BBVA")
+    with c2: bank_chip("openbank-bg", "Openbank")
+    with c3: bank_chip("cajamar-bg", "Cajamar")
 
     view = df.sort_values("Fecha", ascending=False).copy()
     view["Mes"] = view["Fecha"].apply(mes_label)
     for col in BANKS+["Total","+/-"]:
         view[col] = view[col].apply(euro)
-    st.dataframe(view[["Mes"]+BANKS+["Total","+/-"]], use_container_width=True, hide_index=True)
+    styled = style_saldos_table(view[["Mes"]+BANKS+["Total","+/-"]])
+    st.dataframe(styled, use_container_width=True, hide_index=True)
 
 # Nóminas
 def load_nominas():
@@ -381,7 +445,7 @@ def load_nominas():
 
 def render_nominas():
     st.header("💼 Nóminas")
-    src = image_html(ASSETS / "vadillo.png")
+    src = image_html(ASSETS / "vadillo.svg")
     if src:
         st.markdown(f'<div class="vadillo-box"><img src="{src}" alt="Grupo Vadillo Asesores"></div>', unsafe_allow_html=True)
     df = load_nominas()
@@ -430,8 +494,45 @@ def load_vacaciones():
     headers=["Año","Inicio","Fin","Dias","Notas"]
     return load_table("App_Vacaciones", headers)
 
+def render_festivos_editor(year:int):
+    with st.expander("🟤 Revisar / modificar festivos", expanded=False):
+        st.caption("Estos días se usan para pintar el calendario en granate, calcular vísperas de festivo y descontar vacaciones. Puedes desactivar, cambiar fechas o añadir filas manuales.")
+        fdf = load_festivos_df(year).copy()
+        if fdf.empty:
+            fdf = festivos_vitoria_base(year)
+        fdf["Fecha"] = pd.to_datetime(fdf["Fecha"], errors="coerce").dt.date
+        fdf["Activo"] = fdf["Activo"].apply(lambda x: False if str(x).strip().lower() in ("false","0","no","n","") else bool(x))
+        fdf = fdf[["Fecha", "Nombre", "Activo", "Origen"]].sort_values("Fecha")
+        edited = st.data_editor(
+            fdf,
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            key=f"festivos_editor_{year}",
+            column_config={
+                "Fecha": st.column_config.DateColumn("Fecha", format="DD/MM/YYYY"),
+                "Nombre": st.column_config.TextColumn("Nombre"),
+                "Activo": st.column_config.CheckboxColumn("Activo"),
+                "Origen": st.column_config.TextColumn("Origen"),
+            },
+        )
+        c1, c2 = st.columns(2)
+        if c1.button("Guardar festivos", use_container_width=True, key=f"guardar_festivos_{year}"):
+            out = edited.copy()
+            out["Año"] = year
+            save_festivos_year(year, out[["Año", "Fecha", "Nombre", "Activo", "Origen"]])
+            st.cache_data.clear()
+            st.success("Festivos guardados.")
+            st.rerun()
+        if c2.button("Restaurar festivos base", use_container_width=True, key=f"restaurar_festivos_{year}"):
+            save_festivos_year(year, festivos_vitoria_base(year))
+            st.cache_data.clear()
+            st.success("Festivos base restaurados.")
+            st.rerun()
+
 def render_vacaciones(year:int):
     st.divider(); st.subheader("🌴 Vacaciones y calendario laboral")
+    render_festivos_editor(year)
     festivos = festivos_vitoria(year)
     df = load_vacaciones()
     if not df.empty:
@@ -500,15 +601,15 @@ def render_intereses():
     cur=df[(pd.to_numeric(df.get("Año"), errors="coerce")==year)&(pd.to_numeric(df.get("Mes"), errors="coerce")==month)] if not df.empty else pd.DataFrame()
     row=cur.iloc[0].to_dict() if not cur.empty else {}
     c1,c2,c3,c4,c5=st.columns(5)
-    i1=c1.number_input("Interés 1 bruto", value=float(money(row.get("Cuenta1_Interes",0))), step=0.01, format="%.2f")
-    s1=c2.number_input("Saldo 1", value=float(money(row.get("Cuenta1_Saldo",0))), step=0.01, format="%.2f")
-    i2=c3.number_input("Interés 2 bruto", value=float(money(row.get("Cuenta2_Interes",0))), step=0.01, format="%.2f")
-    s2=c4.number_input("Saldo 2", value=float(money(row.get("Cuenta2_Saldo",0))), step=0.01, format="%.2f")
-    ingresado=c5.number_input("Ingresado", value=float(money(row.get("Ingresado",0))), step=0.01, format="%.2f")
+    i1=c1.number_input("Interés 1 bruto", value=float(money(row.get("Cuenta1_Interes",0))), step=0.01, format="%.2f", key=f"int_i1_{year}_{month}")
+    s1=c2.number_input("Saldo 1", value=float(money(row.get("Cuenta1_Saldo",0))), step=0.01, format="%.2f", key=f"int_s1_{year}_{month}")
+    i2=c3.number_input("Interés 2 bruto", value=float(money(row.get("Cuenta2_Interes",0))), step=0.01, format="%.2f", key=f"int_i2_{year}_{month}")
+    s2=c4.number_input("Saldo 2", value=float(money(row.get("Cuenta2_Saldo",0))), step=0.01, format="%.2f", key=f"int_s2_{year}_{month}")
+    ingresado=c5.number_input("Ingresado", value=float(money(row.get("Ingresado",0))), step=0.01, format="%.2f", key=f"int_ingresado_{year}_{month}")
     bruto=i1+i2; ret=bruto*RETENCION_INTERESES; neto=bruto-ret; dif=ingresado-neto if ingresado else 0
     estado = "✅ Correcto" if ingresado and abs(dif)<0.02 else (f"🟢 Sobra {euro(dif)}" if dif>0 else (f"🔴 Falta {euro(abs(dif))}" if ingresado else "Pendiente"))
     a,b,c,d=st.columns(4); a.metric("Bruto", euro(bruto)); b.metric("Retención 19%", euro(ret)); c.metric("Neto esperado", euro(neto)); d.metric("Diferencia", euro(dif))
-    if st.button("Guardar intereses", use_container_width=True):
+    if st.button("Guardar intereses", use_container_width=True, key=f"btn_guardar_intereses_{year}_{month}"):
         new={"Año":year,"Mes":month,"Fecha":date(year,month,1),"Cuenta1_Interes":i1,"Cuenta1_Saldo":s1,"Cuenta2_Interes":i2,"Cuenta2_Saldo":s2,"Retencion":ret,"Neto_esperado":neto,"Ingresado":ingresado,"Diferencia":dif,"Estado":estado}
         df2=df[~((pd.to_numeric(df.get("Año"), errors="coerce")==year)&(pd.to_numeric(df.get("Mes"), errors="coerce")==month))].copy() if not df.empty else pd.DataFrame()
         df2=pd.concat([df2,pd.DataFrame([new])],ignore_index=True); save_table("App_Intereses", df2); st.success("Intereses guardados."); st.rerun()
