@@ -10,16 +10,16 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 try:
-    import extra_streamlit_components as stx
+    from streamlit_js_eval import streamlit_js_eval
 except Exception:
-    stx = None
+    streamlit_js_eval = None
 try:
     from PIL import Image
 except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.6.8"
+APP_VERSION = "0.7.0"
 APP_UPDATED = "10/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -177,8 +177,9 @@ def cookie_manager_resource():
     except Exception:
         return None
 
-COOKIE_BACKUP_FILES = {"nominas.csv", "vacaciones.csv"}
+BROWSER_BACKUP_FILES = {"nominas.csv", "vacaciones.csv"}
 
+# ---------- browser/local persistence ----------
 def _df_to_json_payload(df):
     try:
         d = df.copy()
@@ -191,29 +192,42 @@ def _df_from_json_payload(payload, columns=None):
         return pd.DataFrame(columns=columns or [])
     try:
         data = json.loads(payload)
-        return pd.DataFrame(data)
+        df = pd.DataFrame(data)
+        if columns:
+            for c in columns:
+                if c not in df:
+                    df[c] = None
+            df = df[columns]
+        return df
     except Exception:
         return pd.DataFrame(columns=columns or [])
 
-def _cookie_key(name):
+def _browser_key(name):
     return "ahorro_mikel_" + name.replace(".", "_")
 
-def read_cookie_df(name, columns=None):
-    cm = cookie_manager_resource()
-    if cm is None:
+def read_browser_df(name, columns=None):
+    """Lee copia del navegador (localStorage). Esto sí sobrevive a F5/redeploys en el mismo móvil/PC."""
+    if streamlit_js_eval is None:
         return pd.DataFrame(columns=columns or [])
     try:
-        val = cm.get(cookie=_cookie_key(name))
-        return _df_from_json_payload(val, columns)
+        key = _browser_key(name)
+        payload = streamlit_js_eval(
+            js_expressions=f"localStorage.getItem({json.dumps(key)})",
+            key=f"get_{key}"
+        )
+        return _df_from_json_payload(payload, columns)
     except Exception:
         return pd.DataFrame(columns=columns or [])
 
-def write_cookie_df(name, df):
-    cm = cookie_manager_resource()
-    if cm is None:
+def write_browser_df(name, df):
+    """Guarda copia en localStorage. La app sigue escribiendo CSV para exportar, pero localStorage evita pérdidas al recargar."""
+    if streamlit_js_eval is None:
         return
     try:
-        cm.set(_cookie_key(name), _df_to_json_payload(df), expires_at=datetime.now()+timedelta(days=3650), key="set_"+_cookie_key(name)+"_"+str(len(df)))
+        key = _browser_key(name)
+        payload = _df_to_json_payload(df)
+        js = f"localStorage.setItem({json.dumps(key)}, {json.dumps(payload)})"
+        streamlit_js_eval(js_expressions=js, key=f"set_{key}_{abs(hash(payload))}", want_output=False)
     except Exception:
         pass
 
@@ -221,29 +235,60 @@ def write_cookie_df(name, df):
 def path(name): DATA.mkdir(exist_ok=True); return DATA/name
 
 def read_csv(name, columns=None):
-    # Para nóminas y vacaciones usamos copia de respaldo en cookie/local navegador.
-    # Esto evita que se pierdan al refrescar o tras algunos redeploys de Streamlit.
-    if name in COOKIE_BACKUP_FILES:
-        cookie_df = read_cookie_df(name, columns)
-        if not cookie_df.empty:
-            if columns:
-                for c in columns:
-                    if c not in cookie_df: cookie_df[c]=None
-            memory_store()[name] = cookie_df.copy()
-            return cookie_df.copy()
+    """Lee datos de forma estable.
 
+    Cambio v0.7.0:
+    - Primero lee SIEMPRE el CSV real del servidor.
+    - Solo usa memoria/localStorage si el CSV está vacío.
+    - Esto evita que una copia vacía del navegador o de memoria tape los datos ya guardados.
+    """
     p = path(name)
+    df = pd.DataFrame(columns=columns or [])
+
     if p.exists():
         try:
             df = pd.read_csv(p)
         except Exception:
             df = pd.DataFrame(columns=columns or [])
-    else:
-        df = pd.DataFrame(columns=columns or [])
+
     if columns:
         for c in columns:
-            if c not in df: df[c]=None
-    memory_store()[name] = df.copy()
+            if c not in df:
+                df[c] = None
+        df = df[columns]
+
+    # Si hay CSV con datos, es la fuente principal.
+    if not df.empty:
+        memory_store()[name] = df.copy()
+        if name in BROWSER_BACKUP_FILES:
+            write_browser_df(name, df)
+        return df.copy()
+
+    # Si el CSV está vacío, probamos memoria del servidor.
+    mem = memory_store().get(name)
+    if isinstance(mem, pd.DataFrame) and not mem.empty:
+        mdf = mem.copy()
+        if columns:
+            for c in columns:
+                if c not in mdf:
+                    mdf[c] = None
+            mdf = mdf[columns]
+        return mdf.copy()
+
+    # Último recurso: copia del navegador.
+    if name in BROWSER_BACKUP_FILES:
+        browser_df = read_browser_df(name, columns)
+        if isinstance(browser_df, pd.DataFrame) and not browser_df.empty:
+            memory_store()[name] = browser_df.copy()
+            # Rehidrata el CSV del servidor para siguientes cargas/exportación.
+            try:
+                tmp = path(name + '.tmp')
+                browser_df.to_csv(tmp, index=False)
+                tmp.replace(path(name))
+            except Exception:
+                pass
+            return browser_df.copy()
+
     return df.copy()
 
 def save_csv(name, df):
@@ -254,8 +299,8 @@ def save_csv(name, df):
     df.to_csv(tmp, index=False)
     tmp.replace(final)
     memory_store()[name] = df.copy()
-    if name in COOKIE_BACKUP_FILES:
-        write_cookie_df(name, df)
+    if name in BROWSER_BACKUP_FILES:
+        write_browser_df(name, df)
 
 def build_ahorro_from_saldos():
     """Carga el histórico bueno desde saldos.xlsx si el CSV no existe o está vacío."""
@@ -418,7 +463,30 @@ def calc_nominas(df):
     df['Diferencia']=df['Ingresado']-df['NetoCalculado']
     return df
 
-def save_nominas(df): save_csv('nominas.csv', calc_nominas(df))
+def save_nominas(df):
+    cols=['Anio','Mes','Bruto','SS','Desempleo','IRPF','Otros','NetoCalculado','Ingresado','Diferencia']
+    out=calc_nominas(df)
+    for c in cols:
+        if c not in out:
+            out[c]=None
+    save_csv('nominas.csv', out[cols])
+
+def load_vacaciones():
+    cols=['Anio','Inicio','Fin','Dias','Nota']
+    df=read_csv('vacaciones.csv', cols)
+    for c in cols:
+        if c not in df:
+            df[c]=None
+    return df
+
+def save_vacaciones(df):
+    cols=['Anio','Inicio','Fin','Dias','Nota']
+    out=df.copy()
+    for c in cols:
+        if c not in out:
+            out[c]=None
+    save_csv('vacaciones.csv', out[cols])
+
 
 def nomina_status(diff):
     diff=money(diff)
@@ -506,7 +574,7 @@ def export_excel_bytes():
         load_banks().to_excel(writer, sheet_name='Bancos', index=False)
         load_nominas().to_excel(writer, sheet_name='Nominas', index=False)
         load_intereses().to_excel(writer, sheet_name='Intereses', index=False)
-        read_csv('vacaciones.csv').to_excel(writer, sheet_name='Vacaciones', index=False)
+        load_vacaciones().to_excel(writer, sheet_name='Vacaciones', index=False)
         read_csv('festivos.csv').to_excel(writer, sheet_name='Festivos', index=False)
     bio.seek(0); return bio.getvalue()
 
@@ -788,7 +856,7 @@ def render_calendar(y, vac_days=set()):
 
 def render_vacaciones(year):
     st.subheader('🌴 Vacaciones y calendario laboral')
-    vac=read_csv('vacaciones.csv', ['Anio','Inicio','Fin','Dias','Nota'])
+    vac=load_vacaciones()
     if not vac.empty:
         vac['Anio']=pd.to_numeric(vac['Anio'], errors='coerce').fillna(year).astype(int)
         vac['Inicio']=pd.to_datetime(vac['Inicio'], errors='coerce').dt.date
@@ -806,7 +874,7 @@ def render_vacaciones(year):
         nota=st.text_input('Nota', key=f'vac_nota_{year}_{ini.isoformat()}')
         if st.button('Guardar vacaciones', use_container_width=True, key=f'vac_save_{year}'):
             row={'Anio':year,'Inicio':ini.isoformat(),'Fin':fin.isoformat(),'Dias':dias,'Nota':nota}
-            save_csv('vacaciones.csv', pd.concat([vac,pd.DataFrame([row])], ignore_index=True))
+            save_vacaciones(pd.concat([vac,pd.DataFrame([row])], ignore_index=True))
             st.rerun()
 
     vac_days=set()
@@ -841,14 +909,14 @@ def render_vacaciones(year):
                         idxs=allv[mask].index.tolist() or [yvac.index[i]]
                         idx=idxs[0]
                         allv.loc[idx, ['Anio','Inicio','Fin','Dias','Nota']] = [year, ini2.isoformat(), fin2.isoformat(), dias2, nota2]
-                        save_csv('vacaciones.csv', allv)
+                        save_vacaciones(allv)
                         st.rerun()
                     if c[5].button('❌', key=f'vac_delete_{year}_{i}', help='Borrar periodo'):
                         allv=vac.copy().reset_index(drop=True)
                         mask=(allv['Anio'].astype(int)==year)&(pd.to_datetime(allv['Inicio']).dt.date==pd.to_datetime(r['Inicio']).date())&(pd.to_datetime(allv['Fin']).dt.date==pd.to_datetime(r['Fin']).date())&(allv['Nota'].fillna('').astype(str)==str(r.get('Nota','')))
                         idxs=allv[mask].index.tolist() or [yvac.index[i]]
                         allv=allv.drop(index=idxs[0])
-                        save_csv('vacaciones.csv', allv)
+                        save_vacaciones(allv)
                         st.rerun()
                     st.divider()
 
