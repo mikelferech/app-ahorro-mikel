@@ -296,6 +296,63 @@ def save_table(sheet, df):
     wb.save(EXCEL_PATH)
     st.cache_data.clear()
 
+
+def load_bank_config() -> pd.DataFrame:
+    headers = ["Clave", "Nombre", "Color", "Activo", "Orden"]
+    df = load_table("App_Bancos", headers)
+    if df.empty:
+        df = pd.DataFrame([
+            {"Clave":"BBVA", "Nombre":"BBVA", "Color":"#072146", "Activo":True, "Orden":1},
+            {"Clave":"Openbank", "Nombre":"Openbank", "Color":"#e40046", "Activo":True, "Orden":2},
+            {"Clave":"Cajamar", "Nombre":"Cajamar", "Color":"#008c95", "Activo":True, "Orden":3},
+            {"Clave":"Otros", "Nombre":"Otros", "Color":"#6b7280", "Activo":True, "Orden":4},
+        ])
+        save_table("App_Bancos", df)
+    for h in headers:
+        if h not in df: df[h] = None
+    df["Clave"] = df["Clave"].fillna("").astype(str)
+    df["Nombre"] = df["Nombre"].fillna(df["Clave"]).astype(str)
+    df["Color"] = df["Color"].fillna("#6b7280").astype(str)
+    df["Activo"] = df["Activo"].apply(lambda x: False if str(x).strip().lower() in ("false","0","no","n","") else bool(x))
+    df["Orden"] = pd.to_numeric(df["Orden"], errors="coerce").fillna(99).astype(int)
+    # asegurar claves base
+    for i, clave in enumerate(BANKS, 1):
+        if clave not in set(df["Clave"]):
+            df = pd.concat([df, pd.DataFrame([{"Clave":clave, "Nombre":clave, "Color":"#6b7280", "Activo":True, "Orden":i}])], ignore_index=True)
+    return df.sort_values("Orden")[headers]
+
+def active_bank_keys() -> list:
+    cfg = load_bank_config()
+    keys = [k for k in cfg[cfg["Activo"]]["Clave"].tolist() if k in BANKS]
+    return keys or BANKS
+
+def bank_name(clave: str) -> str:
+    cfg = load_bank_config()
+    row = cfg[cfg["Clave"] == clave]
+    return str(row.iloc[0]["Nombre"]) if not row.empty else clave
+
+def bank_color(clave: str) -> str:
+    cfg = load_bank_config()
+    row = cfg[cfg["Clave"] == clave]
+    return str(row.iloc[0]["Color"]) if not row.empty else "#6b7280"
+
+def month_options(min_year=None, max_year=None):
+    today = date.today()
+    min_year = min_year or max(2012, today.year - 2)
+    max_year = max_year or today.year + 6
+    opts = []
+    for y in range(int(min_year), int(max_year)+1):
+        for m in range(1, 13):
+            d = date(y, m, 1)
+            opts.append((d, mes_label(d)))
+    return opts
+
+def date_options_for_year(year:int):
+    start = date(year,1,1); end = date(year,12,31)
+    dias = [d for d in date_range(start,end)]
+    nombres = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"]
+    return dias, [f"{nombres[d.weekday()]} {d.strftime('%d/%m/%Y')}" for d in dias]
+
 # ------------------ Auth ------------------
 def get_secret_auth():
     try:
@@ -334,19 +391,42 @@ def bank_chip(css, label):
     st.markdown(f'<div class="bank-chip {css}">{label}</div>', unsafe_allow_html=True)
 
 def style_saldos_table(df):
+    cfg = load_bank_config()
+    color_map = {r["Nombre"]: r["Color"] for _, r in cfg.iterrows()}
     def col_style(col):
-        if col.name == "BBVA":
-            return ["background-color:#072146;color:white;font-weight:700" for _ in col]
-        if col.name == "Openbank":
-            return ["background-color:#e40046;color:white;font-weight:700" for _ in col]
-        if col.name == "Cajamar":
-            return ["background-color:#008c95;color:white;font-weight:700" for _ in col]
+        color = color_map.get(col.name)
+        if color:
+            return [f"background-color:{color};color:white;font-weight:700" for _ in col]
         return ["" for _ in col]
-    return df.style.apply(col_style, axis=0).set_table_styles([
-        {"selector":"th.col_heading.level0.col2", "props":"background-color:#072146;color:white;"},
-        {"selector":"th.col_heading.level0.col3", "props":"background-color:#e40046;color:white;"},
-        {"selector":"th.col_heading.level0.col4", "props":"background-color:#008c95;color:white;"},
-    ], overwrite=False)
+    styles=[]
+    for idx, col in enumerate(df.columns):
+        if col in color_map:
+            styles.append({"selector":f"th.col_heading.level0.col{idx}", "props":f"background-color:{color_map[col]};color:white;"})
+    return df.style.apply(col_style, axis=0).set_table_styles(styles, overwrite=False)
+
+def render_bank_config():
+    with st.expander("⚙️ Configurar bancos / colores", expanded=False):
+        st.caption("Puedes cambiar el nombre visible, color y si se muestra cada cuenta. La columna interna se mantiene para no perder datos históricos.")
+        cfg = load_bank_config().copy()
+        edited = st.data_editor(
+            cfg,
+            use_container_width=True,
+            hide_index=True,
+            num_rows="fixed",
+            disabled=["Clave"],
+            key="bank_config_editor",
+            column_config={
+                "Clave": st.column_config.TextColumn("Clave interna"),
+                "Nombre": st.column_config.TextColumn("Nombre visible"),
+                "Color": st.column_config.TextColumn("Color HEX"),
+                "Activo": st.column_config.CheckboxColumn("Mostrar"),
+                "Orden": st.column_config.NumberColumn("Orden", step=1),
+            },
+        )
+        if st.button("Guardar configuración de bancos", use_container_width=True, key="save_bank_config"):
+            save_table("App_Bancos", edited)
+            st.success("Configuración guardada.")
+            st.rerun()
 
 def kpi_dashboard(df):
     valid = df.dropna(subset=["Fecha"]).copy()
@@ -369,19 +449,26 @@ def render_ahorro():
     st.header("💰 Evolución de ahorro")
     df = load_app_ahorro()
     kpi_dashboard(df)
+    render_bank_config()
+    keys = active_bank_keys()
 
     with st.expander("➕ Introducir / actualizar saldo mensual", expanded=False):
         today = date.today()
+        min_year = min([d.year for d in df["Fecha"]]) if not df.empty else 2012
+        opts = month_options(min_year=min_year, max_year=today.year+6)
+        values = [o[0] for o in opts]; labels = [o[1] for o in opts]
         current = date(today.year, today.month, 1)
-        col1, col2 = st.columns([1,3])
-        selected = col1.date_input("Mes", value=current, help="Se guardará como mes completo")
-        selected = normalize_month(selected)
+        idx = values.index(current) if current in values else len(values)-1
+        selected = st.selectbox("Mes", values, index=idx, format_func=lambda d: mes_label(d), key="ahorro_month_select")
         existing = df[df["Fecha"] == selected]
         defaults = existing.iloc[0].to_dict() if not existing.empty else {b: 0.0 for b in BANKS}
-        cols = st.columns(4)
+        cols = st.columns(max(1, len(keys)))
         vals = {}
-        for i,b in enumerate(BANKS):
-            vals[b] = cols[i].number_input(f"Saldo {b}", value=float(defaults.get(b,0) or 0), step=0.01, format="%.2f")
+        for i,b in enumerate(keys):
+            vals[b] = cols[i].number_input(f"Saldo {bank_name(b)}", value=float(defaults.get(b,0) or 0), step=0.01, format="%.2f", key=f"saldo_{b}_{selected}")
+        for b in BANKS:
+            if b not in vals:
+                vals[b] = float(defaults.get(b,0) or 0)
         if st.button("Guardar saldo", use_container_width=True):
             new = {"Fecha": selected, **vals}
             df2 = df[df["Fecha"] != selected].copy() if not df.empty else pd.DataFrame()
@@ -411,17 +498,51 @@ def render_ahorro():
     st.plotly_chart(fig2, use_container_width=True)
 
     st.subheader("Saldos por banco")
-    c1,c2,c3 = st.columns(3)
-    with c1: bank_chip("bbva-bg", "BBVA")
-    with c2: bank_chip("openbank-bg", "Openbank")
-    with c3: bank_chip("cajamar-bg", "Cajamar")
+    chip_cols = st.columns(max(1, len(keys)))
+    for i,b in enumerate(keys):
+        chip_cols[i].markdown(f'<div class="bank-chip" style="background:{bank_color(b)}">{bank_name(b)}</div>', unsafe_allow_html=True)
 
     view = df.sort_values("Fecha", ascending=False).copy()
     view["Mes"] = view["Fecha"].apply(mes_label)
-    for col in BANKS+["Total","+/-"]:
-        view[col] = view[col].apply(euro)
-    styled = style_saldos_table(view[["Mes"]+BANKS+["Total","+/-"]])
+    display_cols = ["Mes"]
+    rename = {}
+    for b in keys:
+        rename[b] = bank_name(b)
+        display_cols.append(b)
+    display_cols += ["Total","+/-"]
+    shown = view[display_cols].rename(columns=rename).copy()
+    for col in shown.columns:
+        if col != "Mes":
+            shown[col] = shown[col].apply(euro)
+    styled = style_saldos_table(shown)
     st.dataframe(styled, use_container_width=True, hide_index=True)
+
+    with st.expander("✏️ Editar o borrar líneas de ahorro", expanded=False):
+        edit = df.sort_values("Fecha", ascending=False).copy()
+        edit["Borrar"] = False
+        edit["Mes"] = edit["Fecha"].apply(mes_label)
+        cols_order = ["Borrar", "Mes"] + BANKS
+        edited = st.data_editor(
+            edit[cols_order],
+            use_container_width=True,
+            hide_index=True,
+            key="editor_ahorro_lineas",
+            column_config={
+                "Borrar": st.column_config.CheckboxColumn("Borrar"),
+                "Mes": st.column_config.TextColumn("Mes", disabled=True),
+                **{b: st.column_config.NumberColumn(bank_name(b), step=0.01, format="%.2f") for b in BANKS},
+            },
+        )
+        if st.button("Guardar cambios de la tabla", use_container_width=True, key="save_edit_ahorro"):
+            base = edit[["Fecha","Mes"]].reset_index(drop=True)
+            ed = edited.reset_index(drop=True)
+            out = base.join(ed.drop(columns=["Mes"], errors="ignore"))
+            out = out[~out["Borrar"].fillna(False)].drop(columns=["Borrar","Mes"], errors="ignore")
+            for b in BANKS:
+                if b not in out: out[b]=0.0
+            save_ahorro(out[["Fecha"]+BANKS])
+            st.success("Cambios guardados.")
+            st.rerun()
 
 # Nóminas
 def load_nominas():
@@ -544,14 +665,17 @@ def render_vacaciones(year:int):
     c2.metric("Días usados", f"{used:g}")
     c3.metric("Días restantes", f"{VACACIONES_ANUALES-used:g}")
     with st.expander("➕ Añadir periodo de vacaciones", expanded=False):
-        start = st.date_input("Fecha inicio", value=date(year, max(1,date.today().month), 1), key=f"vac_start_{year}")
-        end_default = start
-        end = st.date_input("Fecha fin", value=end_default, key=f"vac_end_{year}")
-        if end < start:
-            st.warning("La fecha final no puede ser anterior a la inicial.")
-        calc = working_vacation_days(start, end, festivos) if end >= start else 0
-        dias = st.number_input("Días calculados/editables", value=float(calc), step=0.5, format="%.1f")
+        dias_year, labels_year = date_options_for_year(year)
+        today = date.today()
+        default_start = today if today.year == year else date(year,1,1)
+        idx_start = dias_year.index(default_start) if default_start in dias_year else 0
+        start = st.selectbox("Fecha inicio", dias_year, index=idx_start, format_func=lambda d: labels_year[dias_year.index(d)], key=f"vac_start_select_{year}")
+        end_options = [d for d in dias_year if d >= start]
+        end = st.selectbox("Fecha fin", end_options, index=0, format_func=lambda d: labels_year[dias_year.index(d)], key=f"vac_end_select_{year}_{start.isoformat()}")
+        calc = working_vacation_days(start, end, festivos)
+        dias = st.number_input("Días calculados/editables", value=float(calc), step=0.5, format="%.1f", key=f"vac_dias_{year}_{start}_{end}")
         notas = st.text_input("Notas", value="")
+        st.caption("Las fechas se eligen en listas que empiezan en lunes y la fecha fin arranca desde la fecha inicio.")
         if st.button("Guardar vacaciones", use_container_width=True):
             new = {"Año":year,"Inicio":start.isoformat(),"Fin":end.isoformat(),"Dias":dias,"Notas":notas}
             df2 = pd.concat([df, pd.DataFrame([new])], ignore_index=True) if not df.empty else pd.DataFrame([new])
@@ -622,6 +746,29 @@ def render_intereses():
             for col in ["Cuenta1_Interes","Cuenta1_Saldo","Cuenta2_Interes","Cuenta2_Saldo","Retencion","Neto_esperado","Ingresado","Diferencia"]: show[col]=show[col].apply(euro)
             st.dataframe(show[["Mes_txt","Cuenta1_Interes","Cuenta1_Saldo","Cuenta2_Interes","Cuenta2_Saldo","Retencion","Neto_esperado","Ingresado","Diferencia","Estado"]], use_container_width=True, hide_index=True)
 
+def extract_presupuesto_irpf_table() -> pd.DataFrame:
+    try:
+        wb = load_workbook(BUDGET_PATH, data_only=True)
+        if "IRPF" not in wb.sheetnames:
+            return pd.DataFrame()
+        ws = wb["IRPF"]
+        rows=[]
+        for row in ws.iter_rows(values_only=True):
+            vals = list(row)
+            if any(v is not None and str(v).strip() != "" for v in vals):
+                rows.append(vals)
+        if not rows:
+            return pd.DataFrame()
+        max_len = max(len(r) for r in rows)
+        rows = [r + [None]*(max_len-len(r)) for r in rows]
+        # quitar columnas totalmente vacías
+        df = pd.DataFrame(rows)
+        df = df.dropna(axis=1, how="all")
+        df.columns = [f"Col {i+1}" for i in range(df.shape[1])]
+        return df
+    except Exception:
+        return pd.DataFrame()
+
 def render_irpf():
     st.header("📄 IRPF")
     st.caption("Modelo basado en la hoja IRPF de Presupuesto Casa, conectado a nóminas e intereses de esta app.")
@@ -637,7 +784,7 @@ def render_irpf():
     a,b,c,d=st.columns(4)
     a.metric("Rendimientos íntegros", euro(bruto)); b.metric("Gastos deducibles", euro(gastos)); c.metric("Retención nóminas", euro(ret_trabajo)); d.metric("Intereses brutos", euro(intereses_brutos))
     base_general=max(bruto-gastos,0); base_ahorro=max(intereses_brutos,0); pagos=ret_trabajo+ret_ahorro
-    st.subheader("Tabla IRPF")
+    st.subheader("Resumen automático")
     rows=[
         ("RENTA GENERAL", "", ""),
         ("Rendimientos íntegros", euro(bruto), "Nóminas"),
@@ -650,7 +797,13 @@ def render_irpf():
         ("PAGOS A CUENTA", euro(pagos), "IRPF nómina + retención intereses"),
     ]
     st.dataframe(pd.DataFrame(rows, columns=["Concepto","Importe","Origen"]), use_container_width=True, hide_index=True)
-    st.info("Esta versión replica la estructura base y queda preparada para afinar las fórmulas exactas de cuota/deducciones con tu modelo final de Presupuesto Casa.")
+    st.subheader("Tabla completa del modelo Presupuesto Casa")
+    model = extract_presupuesto_irpf_table()
+    if model.empty:
+        st.warning("No he podido leer la tabla IRPF completa de Presupuesto Casa.")
+    else:
+        st.dataframe(model, use_container_width=True, hide_index=True, height=680)
+        st.caption("De momento se muestra completa como referencia. En la siguiente iteración podemos mapear cada celda/fórmula concreta a los datos automáticos de Ahorro Mikel.")
 
 # Main
 login_gate()
