@@ -183,7 +183,6 @@ def save_table(sheet, df):
 COOKIE_NAME = "ahorro_mikel_auth"
 COOKIE_DAYS = 7
 
-@st.cache_resource
 def get_cookie_manager():
     if stx is None:
         return None
