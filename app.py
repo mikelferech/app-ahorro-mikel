@@ -1,5 +1,6 @@
 import base64
 import calendar
+import hashlib
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -7,10 +8,14 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+try:
+    import extra_streamlit_components as stx
+except Exception:
+    stx = None
 from openpyxl import load_workbook
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.4.1"
 APP_UPDATED = "10/06/2026"
 EXCEL_PATH = Path("Ahorro.xlsx")
 BUDGET_PATH = Path("Presupuesto_Casa.xlsx")
@@ -51,6 +56,12 @@ div[data-testid="stMetricValue"] {font-size: 2.0rem;}
 .footer {margin-top:2.5rem; padding:1.2rem 0 .4rem 0; border-top:1px solid rgba(128,128,128,.22); opacity:.82; font-size:.86rem; display:flex; gap:12px; align-items:center; justify-content:center; flex-wrap:wrap;}
 .footer img {height:28px; width:auto;}
 .small-note {font-size:.85rem; opacity:.78;}
+.logout-mini {display:flex; justify-content:flex-end; align-items:center; gap:.5rem; opacity:.95;}
+/* evita el amarillo/verde raro del autocompletado del navegador */
+input:-webkit-autofill, textarea:-webkit-autofill, select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0px 1000px rgba(31,41,55,.95) inset !important;
+  -webkit-text-fill-color: #fff !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -169,37 +180,108 @@ def save_table(sheet, df):
     st.cache_data.clear()
 
 # ---------- auth ----------
+COOKIE_NAME = "ahorro_mikel_auth"
+COOKIE_DAYS = 7
+
+@st.cache_resource
+def get_cookie_manager():
+    if stx is None:
+        return None
+    return stx.CookieManager()
+
 def get_secret_auth():
-    try: return st.secrets["auth"]["username"], st.secrets["auth"]["password"]
-    except Exception: return None, None
+    try:
+        return st.secrets["auth"]["username"], st.secrets["auth"]["password"]
+    except Exception:
+        return None, None
+
+def auth_token(user: str, password: str) -> str:
+    raw = f"{user}:{password}:ahorro-mikel-v1"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 def render_logo(path, max_width=280):
     src = image_html(path)
     if src:
         st.markdown(f'<img src="{src}" style="max-width:{max_width}px;width:75%;height:auto;">', unsafe_allow_html=True)
 
+def clear_login_state():
+    for k in ("login_user", "login_pass", "login_error"):
+        if k in st.session_state:
+            del st.session_state[k]
+
 def login_gate():
+    """Bloquea la app completa hasta autenticar.
+
+    Importante: si no hay login correcto, no se renderiza absolutamente nada más.
+    También guarda una cookie local para no cerrar sesión al refrescar la página.
+    """
     user, password = get_secret_auth()
-    if "auth_ok" not in st.session_state: st.session_state.auth_ok = False
-    if st.session_state.auth_ok: return
+    if "auth_ok" not in st.session_state:
+        st.session_state.auth_ok = False
+
+    cookie_manager = get_cookie_manager()
+    expected_token = auth_token(user or "", password or "") if user and password else None
+
+    if not st.session_state.auth_ok and cookie_manager is not None and expected_token:
+        try:
+            cookies = cookie_manager.get_all()
+            if cookies.get(COOKIE_NAME) == expected_token:
+                st.session_state.auth_ok = True
+        except Exception:
+            pass
+
+    if st.session_state.auth_ok:
+        return
+
+    # Desde aquí solo se ve el login. No se cargan datos ni pestañas.
     _, center, _ = st.columns([1, 1.15, 1])
     with center:
         src = image_html(MFE_LOGO)
         logo = f'<img src="{src}">' if src else ''
-        st.markdown(f'<div class="login-wrap">{logo}<h2>🔒 Ahorro Mikel</h2><p>Acceso privado</p></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="login-wrap">{logo}<h2>🔒 Ahorro Mikel</h2><p>Acceso privado</p></div>',
+            unsafe_allow_html=True,
+        )
         if not user or not password:
             st.error("Faltan credenciales en Streamlit Secrets.")
             st.code('[auth]\nusername = "mikelferech"\npassword = "TU_CONTRASEÑA"')
             st.stop()
-        u = st.text_input("Usuario", key="login_user")
-        p = st.text_input("Contraseña", type="password", key="login_pass")
-        if st.button("Entrar", use_container_width=True, key="login_btn"):
-            if u == user and p == password:
+
+        with st.form("login_form", clear_on_submit=False):
+            u = st.text_input("Usuario", key="login_user", autocomplete="username")
+            p = st.text_input("Contraseña", type="password", key="login_pass", autocomplete="current-password")
+            submitted = st.form_submit_button("Entrar", use_container_width=True)
+
+        if submitted:
+            if str(u).strip() == str(user).strip() and str(p) == str(password):
                 st.session_state.auth_ok = True
+                st.session_state.login_error = False
+                if cookie_manager is not None and expected_token:
+                    try:
+                        expires_at = datetime.now() + timedelta(days=COOKIE_DAYS)
+                        cookie_manager.set(COOKIE_NAME, expected_token, expires_at=expires_at)
+                    except Exception:
+                        pass
+                clear_login_state()
                 st.rerun()
             else:
-                st.error("Usuario o contraseña incorrectos")
+                st.session_state.login_error = True
+
+        if st.session_state.get("login_error"):
+            st.error("Usuario o contraseña incorrectos")
+
     st.stop()
+
+def logout():
+    cookie_manager = get_cookie_manager()
+    if cookie_manager is not None:
+        try:
+            cookie_manager.delete(COOKIE_NAME)
+        except Exception:
+            pass
+    st.session_state.auth_ok = False
+    clear_login_state()
+    st.rerun()
 
 # ---------- bancos ----------
 def default_bank_config():
@@ -748,9 +830,12 @@ def render_footer():
 # ---------- main ----------
 login_gate()
 col_title, col_out = st.columns([5,1])
-with col_title: render_header()
+with col_title:
+    render_header()
 with col_out:
-    if st.button("Cerrar sesión", use_container_width=True): st.session_state.auth_ok=False; st.rerun()
+    st.markdown('<div class="logout-mini">👤 mikelferech</div>', unsafe_allow_html=True)
+    if st.button("Cerrar sesión", use_container_width=True, key="logout_top"):
+        logout()
 
 if EXCEL_PATH.exists():
     with open(EXCEL_PATH,"rb") as f:
