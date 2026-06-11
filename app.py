@@ -19,8 +19,8 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.7.0"
-APP_UPDATED = "10/06/2026"
+APP_VERSION = "0.7.1"
+APP_UPDATED = "11/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
 MFE_LOGO = Path("mfe_cabecera.png")
@@ -104,6 +104,28 @@ input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb=
 [data-baseweb="input"]:hover, [data-baseweb="select"]:hover {
   border-color:#00a2eb!important;
 }
+
+
+/* Vista móvil: tablas complejas convertidas en tarjetas */
+.mobile-payroll {display:none;}
+.desktop-payroll {display:block;}
+@media (max-width: 760px){
+  .main .block-container {padding-left:.65rem!important; padding-right:.65rem!important; font-size:1rem!important;}
+  .desktop-payroll {display:none!important;}
+  .mobile-payroll {display:block!important;}
+  .pay-card{border:1px solid rgba(128,128,128,.30); border-radius:14px; padding:.8rem; margin:.7rem 0; background:rgba(47,59,79,.22);} 
+  .pay-card.ok{background:rgba(16,185,129,.16);} .pay-card.warn{background:rgba(245,158,11,.16);} .pay-card.bad{background:rgba(220,38,38,.18);} 
+  .pay-head{display:flex;justify-content:space-between;align-items:center;font-weight:900;font-size:1.1rem;margin-bottom:.45rem;}
+  .pay-grid{display:grid;grid-template-columns:1fr 1fr;gap:.35rem .65rem;font-size:.95rem;}
+  .pay-grid div:nth-child(even){text-align:right;font-weight:800;}
+  .brand img{height:54px!important;max-width:240px!important;}
+  [data-testid="stMetricValue"] {font-size:1.9rem!important;}
+  h1 {font-size:2.1rem!important;} h2{font-size:1.65rem!important;} h3{font-size:1.28rem!important;}
+}
+/* Quitar últimos restos rojos de foco/hover */
+* { --primary-color:#00a2eb; }
+[data-baseweb="tab"]:hover, [data-baseweb="tab"][aria-selected="true"] {color:#00a2eb!important;}
+.st-emotion-cache-10trblm, .st-emotion-cache-16idsys p {caret-color:#00a2eb!important;}
 
 </style>
 """, unsafe_allow_html=True)
@@ -531,8 +553,25 @@ def payroll_html(df):
     html += "</tbody></table>"
     return html
 
+def payroll_mobile_html(df):
+    cols = ['Mes','Bruto','SS','Desempleo','IRPF','Otros','NetoCalculado','Ingresado','Diferencia','Estado']
+    html = "<div class='mobile-payroll'>"
+    for _, r in df[cols].iterrows():
+        diff = money(r.get('Diferencia', 0))
+        cls = 'ok' if abs(diff) <= 0.01 else ('warn' if abs(diff) <= 1 else 'bad')
+        html += f"<div class='pay-card {cls}'>"
+        html += f"<div class='pay-head'><span>{r.get('Mes','')}</span><span>{r.get('Estado','')}</span></div>"
+        html += "<div class='pay-grid'>"
+        for label, col in [('Neto', 'NetoCalculado'), ('Ingresado', 'Ingresado'), ('Diferencia', 'Diferencia'), ('Bruto', 'Bruto'), ('SS', 'SS'), ('Desempleo', 'Desempleo'), ('IRPF', 'IRPF'), ('Otros', 'Otros')]:
+            html += f"<div>{label}</div><div>{euro(r.get(col,0))}</div>"
+        html += "</div></div>"
+    html += "</div>"
+    return html
+
 def ordered_nominas(df):
     order={m:i+1 for i,m in enumerate(MONTHS_ES)}
+    # Soporte futuro para 14 pagas: colocamos extras junto a verano/navidad.
+    order.update({'EXTRA VERANO':6.5, 'EXTRA JUL':6.5, 'PAGA VERANO':6.5, 'EXTRA NAVIDAD':12.5, 'EXTRA DIC':12.5, 'PAGA NAVIDAD':12.5})
     if df.empty: return df
     out=df.copy(); out['_m']=out['Mes'].map(order).fillna(99)
     return out.sort_values(['Anio','_m']).drop(columns=['_m'])
@@ -690,18 +729,19 @@ def render_ahorro():
     for c in show.columns:
         if c!='Mes': show[c]=show[c].apply(euro)
     st.dataframe(show, hide_index=True, use_container_width=True)
-    st.subheader('Editar / borrar saldo')
-    labels=table['Mes'].tolist()
-    sel_label=st.selectbox('Selecciona mes', labels, key='edit_ah_sel')
-    row=table[table['Mes']==sel_label].iloc[0]
-    cols=st.columns(max(1,len(keys)))
-    new={'Fecha':row['Fecha']}
-    for i,k in enumerate(keys): new[k]=cols[i].number_input(bank_name(k), value=float(money(row.get(k,0))), step=.01, format='%.2f', key=f'edit_ah_{k}_{sel_label}')
-    c1,c2=st.columns(2)
-    if c1.button('✏️ Guardar cambios', use_container_width=True):
-        base=df[df['Fecha']!=row['Fecha']].copy(); save_ahorro(pd.concat([base,pd.DataFrame([new])], ignore_index=True)); st.success('Actualizado'); st.rerun()
-    if c2.button('❌ Borrar mes', use_container_width=True):
-        save_ahorro(df[df['Fecha']!=row['Fecha']].copy()); st.success('Borrado'); st.rerun()
+    with st.expander('✏️ Editar / borrar saldo', expanded=False):
+        labels=table['Mes'].tolist()
+        sel_label=st.selectbox('Selecciona mes', labels, key='edit_ah_sel')
+        row=table[table['Mes']==sel_label].iloc[0]
+        cols=st.columns(max(1,len(keys)))
+        new={'Fecha':row['Fecha']}
+        for i,k in enumerate(keys):
+            new[k]=cols[i].number_input(bank_name(k), value=float(money(row.get(k,0))), step=.01, format='%.2f', key=f'edit_ah_{k}_{sel_label}')
+        c1,c2=st.columns(2)
+        if c1.button('✏️ Guardar cambios', use_container_width=True):
+            base=df[df['Fecha']!=row['Fecha']].copy(); save_ahorro(pd.concat([base,pd.DataFrame([new])], ignore_index=True)); st.success('Actualizado'); st.rerun()
+        if c2.button('❌ Borrar mes', use_container_width=True):
+            save_ahorro(df[df['Fecha']!=row['Fecha']].copy()); st.success('Borrado'); st.rerun()
 
 # payroll/vacations/interests/irpf
 def render_nominas():
@@ -743,6 +783,26 @@ def render_nominas():
             save_nominas(df[df['Anio']!=year].copy())
             st.warning('Nóminas del año borradas.')
             st.rerun()
+        with st.expander('Opciones avanzadas de pagas', expanded=False):
+            st.caption('Preparado por si algún año pasas a 14 pagas. Genera dos filas extra editables: verano y Navidad.')
+            if st.button('Cambiar a 14 pagas / añadir extras', key=f'nom_14_{year}'):
+                cur=load_nominas()
+                base=cur[cur['Anio']!=year].copy()
+                y=cur[cur['Anio']==year].copy()
+                if y.empty:
+                    rows=[]
+                    for mes in MONTHS_ES:
+                        rows.append({'Anio':year,'Mes':mes,'Bruto':bruto_base,'SS':ss_base,'Desempleo':des_base,'IRPF':irpf_base,'Otros':otros_base,'Ingresado':0.0})
+                    y=pd.DataFrame(rows)
+                # extras editables; por defecto sin SS/desempleo, pero con IRPF según porcentaje.
+                extras=pd.DataFrame([
+                    {'Anio':year,'Mes':'EXTRA VERANO','Bruto':bruto_base,'SS':0.0,'Desempleo':0.0,'IRPF':irpf_base,'Otros':0.0,'Ingresado':0.0},
+                    {'Anio':year,'Mes':'EXTRA NAVIDAD','Bruto':bruto_base,'SS':0.0,'Desempleo':0.0,'IRPF':irpf_base,'Otros':0.0,'Ingresado':0.0},
+                ])
+                y=y[~y['Mes'].isin(['EXTRA VERANO','EXTRA NAVIDAD','EXTRA JUL','EXTRA DIC','PAGA VERANO','PAGA NAVIDAD'])]
+                save_nominas(pd.concat([base,y,extras], ignore_index=True))
+                st.success('Añadidas pagas extra de verano y Navidad. Puedes editar todos los importes.')
+                st.rerun()
 
     ydf=ordered_nominas(load_nominas())
     ydf=ydf[ydf['Anio']==year].copy()
@@ -760,7 +820,7 @@ def render_nominas():
         view['Estado']=view['Diferencia'].apply(nomina_status)
         ordered_cols=['Mes','Bruto','SS','Desempleo','IRPF','Otros','NetoCalculado','Ingresado','Diferencia','Estado']
         view=view[ordered_cols]
-        st.markdown(payroll_html(view), unsafe_allow_html=True)
+        st.markdown('<div class="desktop-payroll">'+payroll_html(view)+'</div>'+payroll_mobile_html(view), unsafe_allow_html=True)
 
         with st.expander('✏️ Editar nóminas / introducir ingresado', expanded=True):
             st.caption('La columna 💙 Ingresado es la que normalmente rellenarás cada mes. El resto queda editable por si una nómina cambia.')
@@ -931,7 +991,17 @@ def render_vacaciones(year):
 
 def render_intereses():
     st.header('🏦 Intereses')
-    render_bank_config('intereses_banks'); df=load_intereses(); year=st.selectbox('Año', list(range(date.today().year-2,date.today().year+9)), index=2, key='int_year')
+    render_bank_config('intereses_banks')
+    df=load_intereses()
+    year=st.selectbox('Año', list(range(date.today().year-2,date.today().year+9)), index=2, key='int_year')
+    ydf=load_intereses(); ydf=ydf[ydf['Anio']==year].copy()
+
+    if not ydf.empty:
+        c=st.columns(3)
+        c[0].metric('Interés bruto anual', euro(ydf['InteresBruto'].sum()))
+        c[1].metric('Retención anual', euro(ydf['Retencion'].sum()))
+        c[2].metric('Neto anual', euro(ydf['NetoEsperado'].sum()))
+
     with st.expander('➕ Añadir / actualizar interés', expanded=True):
         mes=st.selectbox('Mes', MONTHS_ES, index=date.today().month-1, key='int_mes')
         banco=st.selectbox('Banco', bank_keys(True), format_func=bank_name, key='int_banco')
@@ -939,21 +1009,51 @@ def render_intereses():
         d=ex.iloc[0].to_dict() if not ex.empty else {}
         c=st.columns(3)
         bruto=c[0].number_input('Interés bruto', value=float(money(d.get('InteresBruto',0))), step=.01, format='%.2f', key=f'int_bruto_{year}_{mes}_{banco}')
-        saldo=c[1].number_input('Saldo', value=float(money(d.get('Saldo',0))), step=.01, format='%.2f', key=f'int_saldo_{year}_{mes}_{banco}')
-        ingresado=c[2].number_input('Ingresado', value=float(money(d.get('Ingresado',0))), step=.01, format='%.2f', key=f'int_ingresado_{year}_{mes}_{banco}')
-        neto=bruto*0.81; st.info(f'Retención: {euro(bruto*.19)} · Neto esperado: {euro(neto)} · Diferencia: {euro(ingresado-neto)}')
-        if st.button('Guardar interés', use_container_width=True):
-            row={'Anio':year,'Mes':mes,'Banco':banco,'InteresBruto':bruto,'Saldo':saldo,'Ingresado':ingresado}
-            base=df[~((df['Anio']==year)&(df['Mes']==mes)&(df['Banco']==banco))].copy(); save_intereses(pd.concat([base,pd.DataFrame([row])], ignore_index=True)); st.rerun()
-    ydf=load_intereses(); ydf=ydf[ydf['Anio']==year]
+        ret=bruto*0.19
+        neto=bruto-ret
+        ingresado=c[1].number_input('Ingresado', value=float(money(d.get('Ingresado',0))), step=.01, format='%.2f', key=f'int_ingresado_{year}_{mes}_{banco}')
+        c[2].markdown(f"<div style='padding:.55rem;border:1px solid rgba(128,128,128,.25);border-radius:10px'><b>Retención 19%</b><br>{euro(ret)}<br><b>Neto esperado</b><br>{euro(neto)}</div>", unsafe_allow_html=True)
+        st.info(f'El bruto irá a Rendimiento neto capital mobiliario y la retención a Retenciones capital mobiliario en IRPF. Diferencia con ingreso: {euro(ingresado-neto)}')
+        if st.button('Guardar interés', use_container_width=True, key=f'int_save_{year}_{mes}_{banco}'):
+            row={'Anio':year,'Mes':mes,'Banco':banco,'InteresBruto':bruto,'Saldo':0.0,'Ingresado':ingresado}
+            base=df[~((df['Anio']==year)&(df['Mes']==mes)&(df['Banco']==banco))].copy()
+            save_intereses(pd.concat([base,pd.DataFrame([row])], ignore_index=True))
+            st.rerun()
+
+    ydf=load_intereses(); ydf=ydf[ydf['Anio']==year].copy()
     if not ydf.empty:
-        show=ydf.copy();
-        for c in ['InteresBruto','Saldo','Retencion','NetoEsperado','Ingresado','Diferencia']: show[c]=show[c].apply(euro)
+        order={m:i for i,m in enumerate(MONTHS_ES)}
+        ydf['_o']=ydf['Mes'].map(order).fillna(99); ydf=ydf.sort_values(['_o','Banco']).drop(columns=['_o'])
+        st.subheader('Tabla de intereses')
+        show=ydf[['Mes','Banco','InteresBruto','Retencion','NetoEsperado','Ingresado','Diferencia']].copy()
+        show['Banco']=show['Banco'].apply(bank_name)
+        for c in ['InteresBruto','Retencion','NetoEsperado','Ingresado','Diferencia']:
+            show[c]=show[c].apply(euro)
+        show=show.rename(columns={'InteresBruto':'Interés bruto','Retencion':'Retención 19%','NetoEsperado':'Neto esperado'})
         st.dataframe(show, hide_index=True, use_container_width=True)
-        labels=(ydf['Mes']+' · '+ydf['Banco']).tolist(); sel=st.selectbox('Borrar registro', ['']+labels)
-        if sel and st.button('❌ Borrar interés', use_container_width=True):
-            idx=labels.index(sel); todel=ydf.iloc[idx]
-            save_intereses(df[~((df['Anio']==todel.Anio)&(df['Mes']==todel.Mes)&(df['Banco']==todel.Banco))]); st.rerun()
+
+        with st.expander('✏️ Editar / borrar intereses', expanded=False):
+            edit=ydf[['Mes','Banco','InteresBruto','Ingresado']].copy().reset_index(drop=True)
+            edited=st.data_editor(edit, hide_index=True, use_container_width=True, num_rows='fixed', key=f'int_edit_{year}', column_config={
+                'Mes': st.column_config.SelectboxColumn('Mes', options=MONTHS_ES, width='small'),
+                'Banco': st.column_config.SelectboxColumn('Banco', options=bank_keys(True), width='medium'),
+                'InteresBruto': st.column_config.NumberColumn('Interés bruto', format='%.2f'),
+                'Ingresado': st.column_config.NumberColumn('Ingresado', format='%.2f'),
+            })
+            c1,c2=st.columns(2)
+            if c1.button('💾 Guardar cambios de intereses', use_container_width=True, key=f'int_edit_save_{year}'):
+                base=df[df['Anio']!=year].copy()
+                edited['Anio']=year
+                edited['Saldo']=0.0
+                save_intereses(pd.concat([base, edited], ignore_index=True))
+                st.success('Intereses guardados')
+                st.rerun()
+            labels=(ydf['Mes']+' · '+ydf['Banco']).tolist()
+            sel=st.selectbox('Borrar registro', ['']+labels, key=f'int_del_sel_{year}')
+            if sel and c2.button('❌ Borrar interés seleccionado', use_container_width=True, key=f'int_del_btn_{year}'):
+                idx=labels.index(sel); todel=ydf.iloc[idx]
+                save_intereses(df[~((df['Anio']==todel.Anio)&(df['Mes']==todel.Mes)&(df['Banco']==todel.Banco))])
+                st.rerun()
 
 def cuota_general(base):
     tr=[(0,18080,.23),(18080,36160,.28),(36160,54240,.35),(54240,77450,.40),(77450,107260,.45),(107260,142960,.46),(142960,208390,.47)]
@@ -989,11 +1089,13 @@ def render_irpf():
         'Rendimiento neto capital mobiliario':cap,'Base liquidable ahorro':cap,'Resultado escala general':res_gen,'Minoración':minoracion,'Cuota íntegra general':cuota_gen,'Cuota íntegra ahorro':cuota_aho,'Cuota líquida':total,
         'Retenciones trabajo':ret_trab,'Retenciones capital mobiliario':ret_cap,'Total pagos a cuenta':pagos,'Cuota diferencial':diferencial
     }
-    st.caption('Valores automáticos desde Nóminas e Intereses. Puedes ajustar manualmente aquí para simular o corregir.')
-    cols=st.columns(2); manual={}
-    names=list(vals.keys())
-    for i,name in enumerate(names):
-        manual[name]=(cols[i%2].number_input(name, value=float(vals[name]), step=.01, format='%.2f', key=f'irpf_{year}_{safe_key(name)}'))
+    manual=dict(vals)
+    with st.expander('✏️ Introducción / ajuste manual de datos IRPF', expanded=False):
+        st.caption('Valores automáticos desde Nóminas e Intereses. Puedes ajustar manualmente aquí para simular o corregir.')
+        cols=st.columns(2)
+        names=list(vals.keys())
+        for i,name in enumerate(names):
+            manual[name]=(cols[i%2].number_input(name, value=float(vals[name]), step=.01, format='%.2f', key=f'irpf_{year}_{safe_key(name)}'))
     diferencial=manual['Cuota líquida']-manual['Total pagos a cuenta']
     html="<table class='irpf-table'><tr><th colspan='2'>RENTA {}</th><th colspan='2'>CUOTA / PAGOS</th></tr>".format(year)
     left=['Rendimientos íntegros','Gastos deducibles','Bonificación','Rendimiento neto trabajo','Base imponible general','Rendimiento neto capital mobiliario','Base liquidable ahorro']
