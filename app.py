@@ -19,7 +19,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.7.5"
+APP_VERSION = "0.7.6"
 APP_UPDATED = "12/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -96,6 +96,9 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem
 .vadillo-box img{max-height:78px;max-width:95%;object-fit:contain;}
 @media (prefers-color-scheme: dark){.vadillo-box{background:#111827}.vadillo-box img{filter: grayscale(1) brightness(0) invert(1);}}
 .payroll-table{width:100%;border-collapse:collapse;font-size:1.00rem;table-layout:fixed}.payroll-table th{background:#2F3B4F;color:#fff;padding:6px 6px;border-bottom:2px solid #00a2eb;text-align:right}.payroll-table th:first-child,.payroll-table td:first-child{text-align:left}.payroll-table td{padding:5px 6px;border:1px solid rgba(128,128,128,.22);text-align:right;font-variant-numeric:tabular-nums}.payroll-ok{background:rgba(16,185,129,.18)}.payroll-warn{background:rgba(245,158,11,.16)}.payroll-bad{background:rgba(220,38,38,.20)}.payroll-income{background:rgba(59,130,246,.18)!important;color:#dbeafe!important;font-weight:900}.compact-editor [data-testid="stDataFrame"]{font-size:.98rem!important}.irpf-table{width:100%;border-collapse:collapse;font-size:1.05rem}.irpf-table th{background:#2F3B4F;color:white;padding:9px;border-bottom:2px solid #00a2eb}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
+.interest-summary{padding:.48rem .65rem;border:1px solid rgba(128,128,128,.25);border-radius:10px;line-height:1.35;display:grid;grid-template-rows:auto auto;gap:.22rem;}
+.interest-summary .is-row{display:flex;align-items:center;justify-content:space-between;gap:.8rem;white-space:nowrap;}
+.interest-summary b{font-weight:900}.interest-summary span{font-weight:850;font-variant-numeric:tabular-nums;}
 
 /* Azul MFE también en hover/focus de formularios y botones */
 .stButton > button:hover, .stDownloadButton > button:hover {
@@ -775,6 +778,27 @@ def render_ahorro():
 def load_empresa_config():
     cols=['Nombre','ColorFondo','ColorTexto','LogoArchivo','Pagas','LogoBase64','LogoExt']
     df=read_csv('empresa_config.csv', cols)
+    browser_df = read_browser_df('empresa_config.csv', cols)
+
+    # Si el CSV viene de una actualización y vuelve al logo por defecto,
+    # pero el navegador tiene una configuración guardada con LogoBase64,
+    # priorizamos la copia del navegador para que el logo personalizado no se pierda.
+    if isinstance(browser_df, pd.DataFrame) and not browser_df.empty:
+        try:
+            brow = browser_df.iloc[0].to_dict()
+            brow_b64 = str(brow.get('LogoBase64') or '')
+            csv_b64 = ''
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                csv_b64 = str(df.iloc[0].to_dict().get('LogoBase64') or '')
+            if brow_b64 and brow_b64.lower() not in ('nan','none') and (not csv_b64 or csv_b64.lower() in ('nan','none')):
+                df = browser_df.copy()
+                try:
+                    save_csv('empresa_config.csv', df)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     if df.empty:
         df=pd.DataFrame([{'Nombre':'Vadillo Asesores','ColorFondo':'#111827','ColorTexto':'#FFFFFF','LogoArchivo':'vadillo.svg','Pagas':12,'LogoBase64':'','LogoExt':'svg'}])
         save_csv('empresa_config.csv', df)
@@ -1116,7 +1140,6 @@ def render_intereses():
         top=st.columns([1,1])
         mes=top[0].selectbox('Mes', MONTHS_ES, index=date.today().month-1, key='int_mes')
         banco=top[1].selectbox('Banco', bank_keys(True), format_func=bank_name, key='int_banco')
-        top[1].markdown(f"<div style='margin-top:-.45rem;font-weight:900;color:{bank_color(banco)}'>● {bank_name(banco)}</div>", unsafe_allow_html=True)
         ex=df[(df['Anio']==year)&(df['Mes']==mes)&(df['Banco']==banco)]
         d=ex.iloc[0].to_dict() if not ex.empty else {}
         clear_key = st.session_state.get('int_clear_key')
@@ -1133,7 +1156,7 @@ def render_intereses():
         neto=bruto-ret
         ingresado_txt=c[1].text_input('Ingresado', value=euro_input_text(default_ing), key=f'int_ingresado_txt_{year}_{mes}_{banco}_{form_ver}', help='Puedes usar coma decimal: 249,65')
         ingresado=money(ingresado_txt)
-        c[2].markdown(f"<div style='padding:.48rem .65rem;border:1px solid rgba(128,128,128,.25);border-radius:10px;line-height:1.28'><b>Retención 19%</b><br>{euro(ret)}<br><b>Neto esperado</b><br>{euro(neto)}</div>", unsafe_allow_html=True)
+        c[2].markdown(f"<div class='interest-summary'><div class='is-row'><b>Retención 19%</b><span>{euro(ret)}</span></div><div class='is-row'><b>Neto esperado</b><span>{euro(neto)}</span></div></div>", unsafe_allow_html=True)
         st.info(f'El bruto irá a Rendimiento neto capital mobiliario y la retención a Retenciones capital mobiliario en IRPF. Diferencia con ingreso: {euro(ingresado-neto)}')
         if st.button('Guardar interés', use_container_width=True, key=f'int_save_{year}_{mes}_{banco}'):
             row={'Anio':year,'Mes':mes,'Banco':banco,'InteresBruto':bruto,'Saldo':0.0,'Ingresado':ingresado}
@@ -1150,11 +1173,17 @@ def render_intereses():
         ydf['_o']=ydf['Mes'].map(order).fillna(99); ydf=ydf.sort_values(['_o','Banco']).drop(columns=['_o'])
         st.subheader('Tabla de intereses')
         show=ydf[['Mes','Banco','InteresBruto','Retencion','NetoEsperado','Ingresado','Diferencia']].copy()
+        bank_keys_for_style = show['Banco'].tolist()
         show['Banco']=show['Banco'].apply(bank_name)
         for c in ['InteresBruto','Retencion','NetoEsperado','Ingresado','Diferencia']:
             show[c]=show[c].apply(euro)
         show=show.rename(columns={'InteresBruto':'Interés bruto','Retencion':'Retención 19%','NetoEsperado':'Neto esperado'})
-        st.dataframe(show, hide_index=True, use_container_width=True)
+        try:
+            style_df = pd.DataFrame('', index=show.index, columns=show.columns)
+            style_df['Banco'] = [f'color: {bank_color(k)}; font-weight: 900;' for k in bank_keys_for_style]
+            st.dataframe(show.style.apply(lambda _x: style_df, axis=None), hide_index=True, use_container_width=True)
+        except Exception:
+            st.dataframe(show, hide_index=True, use_container_width=True)
 
         with st.expander('✏️ Editar / borrar intereses', expanded=False):
             edit=ydf[['Mes','Banco','InteresBruto','Ingresado']].copy().reset_index(drop=True)
