@@ -19,7 +19,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.7.7"
+APP_VERSION = "0.7.8"
 APP_UPDATED = "12/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -769,7 +769,11 @@ def render_ahorro():
         for k in keys:
             col_name = bank_name(k)
             if col_name in style_df.columns:
-                style_df[col_name] = f'color: {bank_color(k)}; font-weight: 900;'
+                # BBVA en azul oscuro no se lee bien en modo oscuro; lo dejamos con color del tema.
+                if str(bank_name(k)).strip().upper() == 'BBVA' or str(k).strip().upper() == 'BBVA':
+                    style_df[col_name] = 'font-weight: 900;'
+                else:
+                    style_df[col_name] = f'color: {bank_color(k)}; font-weight: 900;'
         if 'Diferencia' in style_df.columns:
             diffs = raw_show['Diferencia'].apply(money).tolist()
             style_df['Diferencia'] = [
@@ -831,13 +835,13 @@ def load_empresa_config():
             pass
 
     if df.empty:
-        df=pd.DataFrame([{'Nombre':'Vadillo Asesores','ColorFondo':'#111827','ColorTexto':'#FFFFFF','LogoArchivo':'vadillo.svg','Pagas':12,'LogoBase64':'','LogoExt':'svg'}])
+        df=pd.DataFrame([{'Nombre':'Empresa','ColorFondo':'#111827','ColorTexto':'#FFFFFF','LogoArchivo':'','Pagas':12,'LogoBase64':'','LogoExt':'png'}])
         save_csv('empresa_config.csv', df)
     r=df.iloc[0].to_dict()
     r['Nombre']=str(r.get('Nombre') or 'Empresa')
     r['ColorFondo']=str(r.get('ColorFondo') or '#111827')
     r['ColorTexto']=str(r.get('ColorTexto') or '#FFFFFF')
-    r['LogoArchivo']=str(r.get('LogoArchivo') or 'vadillo.svg')
+    r['LogoArchivo']=str(r.get('LogoArchivo') or '')
     r['LogoBase64']='' if pd.isna(r.get('LogoBase64')) else str(r.get('LogoBase64') or '')
     r['LogoExt']='png' if pd.isna(r.get('LogoExt')) else str(r.get('LogoExt') or 'png').replace('.','')
     try: r['Pagas']=int(float(r.get('Pagas') or 12))
@@ -865,16 +869,16 @@ def empresa_logo_src(cfg=None):
         if ext=='jpg': ext='jpeg'
         if ext=='svg': ext='svg+xml'
         return f"data:image/{ext};base64,{raw}"
-    p=Path(cfg.get('LogoArchivo','vadillo.svg'))
-    if p.exists():
+    p=Path(str(cfg.get('LogoArchivo') or ''))
+    if str(p) and p.exists():
         return img_src(p)
-    return img_src(VADILLO_LOGO)
+    return None
 
 def empresa_logo_path():
     cfg=load_empresa_config()
-    p=Path(cfg.get('LogoArchivo','vadillo.svg'))
-    if p.exists(): return p
-    return VADILLO_LOGO
+    p=Path(str(cfg.get('LogoArchivo') or ''))
+    if str(p) and p.exists(): return p
+    return None
 
 def render_empresa_box():
     cfg=load_empresa_config()
@@ -895,7 +899,7 @@ def render_empresa_config():
         pagas=c[3].selectbox('Pagas', [12,14], index=0 if cfg['Pagas']==12 else 1, key='emp_pagas')
         st.caption('Recomendaciones logo: PNG o SVG · fondo transparente recomendado · formato horizontal · mínimo 300×100 px · máximo 1 MB. El logo se guarda también codificado para que no se pierda al refrescar.')
         up=st.file_uploader('Subir nuevo logo de empresa', type=['png','svg'], key='emp_logo_upload')
-        logo_file=cfg.get('LogoArchivo','vadillo.svg')
+        logo_file=cfg.get('LogoArchivo','')
         logo_b64=cfg.get('LogoBase64','')
         logo_ext=cfg.get('LogoExt','png')
 

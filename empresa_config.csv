@@ -1,2 +1,2 @@
-Nombre,ColorFondo,ColorTexto,LogoArchivo,Pagas
-Vadillo Asesores,#111827,#FFFFFF,vadillo.svg,12
+Nombre,ColorFondo,ColorTexto,LogoArchivo,Pagas,LogoBase64,LogoExt
+Empresa,#111827,#FFFFFF,,12,,png
