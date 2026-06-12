@@ -19,7 +19,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.7.2"
+APP_VERSION = "0.7.3"
 APP_UPDATED = "12/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -79,8 +79,8 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem
 .row-card{border-bottom:1px solid rgba(128,128,128,.15);padding:.35rem 0;}
 .footer{margin-top:2rem;border-top:1px solid rgba(128,128,128,.22);padding:1rem 0 .2rem;display:flex;align-items:center;justify-content:center;gap:14px;opacity:.8;font-size:.86rem;}
 .footer img{height:24px;width:auto;}
-.app-footer{margin-top:2rem;border-top:1px solid rgba(128,128,128,.22);padding:1rem 0 .2rem;display:flex;align-items:center;justify-content:space-between;gap:12px;opacity:.9;font-size:.9rem;}
-.app-footer .left{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.app-footer img{height:24px;width:auto}.app-footer .right{display:flex;align-items:center;gap:10px;justify-content:flex-end}.footer-user{font-weight:800;opacity:.85}
+.app-footer{margin-top:2rem;border-top:1px solid rgba(128,128,128,.22);padding:.75rem 0 .2rem;display:flex;align-items:center;justify-content:space-between;gap:12px;opacity:.82;font-size:.88rem;}
+.footer-meta{opacity:.85;font-weight:650}.footer-user{font-weight:800;opacity:.85}.footer-logout button{font-size:.92rem!important;padding:.2rem .5rem!important;min-height:30px!important;border-color:rgba(128,128,128,.35)!important;}
 .irpf-desktop{display:block}.irpf-mobile{display:none}
 .irpf-block{border:1px solid rgba(128,128,128,.22);border-radius:12px;overflow:hidden;margin-bottom:1rem}.irpf-block-title{background:#2F3B4F;color:#fff;font-weight:900;font-size:1.15rem;padding:.75rem;border-bottom:2px solid #00a2eb}.irpf-row{display:grid;grid-template-columns:1fr auto;gap:.75rem;padding:.7rem .75rem;border-bottom:1px solid rgba(128,128,128,.18);align-items:center}.irpf-row:last-child{border-bottom:none}.irpf-row .num{font-weight:900;white-space:nowrap;font-variant-numeric:tabular-nums}.irpf-final{padding:.75rem;font-weight:900;text-align:center;border-radius:10px;margin-top:.6rem}
 .company-card{border:1px solid rgba(128,128,128,.22);border-radius:14px;padding:1rem;background:rgba(47,59,79,.18);}
@@ -120,7 +120,7 @@ input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb=
   .desktop-payroll {display:none!important;}
   .mobile-payroll {display:block!important;}
   .irpf-desktop{display:none!important}.irpf-mobile{display:block!important}
-  .app-footer{align-items:flex-start;flex-direction:column}.app-footer .right{justify-content:flex-start}
+  .app-footer{align-items:flex-start;flex-direction:column;gap:.35rem}.footer-meta{font-size:.82rem}.footer-user{font-size:.86rem}
   .irpf-row{font-size:1rem;}
   .pay-card{border:1px solid rgba(128,128,128,.30); border-radius:14px; padding:.8rem; margin:.7rem 0; background:rgba(47,59,79,.22);} 
   .pay-card.ok{background:rgba(16,185,129,.16);} .pay-card.warn{background:rgba(245,158,11,.16);} .pay-card.bad{background:rgba(220,38,38,.18);} 
@@ -208,7 +208,7 @@ def cookie_manager_resource():
     except Exception:
         return None
 
-BROWSER_BACKUP_FILES = {"nominas.csv", "vacaciones.csv"}
+BROWSER_BACKUP_FILES = {"nominas.csv", "vacaciones.csv", "intereses.csv"}
 
 # ---------- browser/local persistence ----------
 def _df_to_json_payload(df):
@@ -612,20 +612,21 @@ def header():
     """, unsafe_allow_html=True)
 
 def footer():
-    st.markdown("<div class='app-footer'>", unsafe_allow_html=True)
-    c1, c2 = st.columns([6, 2])
+    c1, c2 = st.columns([7, 3])
     with c1:
         st.markdown(
-            f"<div class='left'><img src='{img_src(MFE_LOGO)}'><span><b>Ahorro Mikel v{APP_VERSION}</b></span><span>Actualizado: {APP_UPDATED}</span></div>",
+            f"<div class='footer-meta'>Ahorro Mikel v{APP_VERSION} · Actualizado: {APP_UPDATED}</div>",
             unsafe_allow_html=True,
         )
     with c2:
         a, b = st.columns([3, 1])
         a.markdown("<div class='footer-user'>👤 mikelferech</div>", unsafe_allow_html=True)
-        if b.button('🚪', help='Cerrar sesión', key='logout_footer'):
-            st.session_state.auth_ok = False
-            st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+        with b:
+            st.markdown("<div class='footer-logout'>", unsafe_allow_html=True)
+            if st.button('🚪', help='Cerrar sesión', key='logout_footer_compact'):
+                st.session_state.auth_ok = False
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
 def export_excel_bytes():
     bio=io.BytesIO()
@@ -828,7 +829,6 @@ def render_empresa_config():
 def render_nominas():
     st.header('💼 Nóminas')
     render_empresa_box()
-    render_empresa_config()
 
     df=load_nominas()
     years=list(range(date.today().year-2,date.today().year+9))
@@ -937,6 +937,7 @@ def render_nominas():
                 st.rerun()
 
     render_vacaciones(year)
+    render_empresa_config()
 
 def easter(y):
     a=y%19; b=y//100; c=y%100; d=b//4; e=b%4; f=(b+8)//25; g=(b-f+1)//3; h=(19*a+b-d-g+15)%30; i=c//4; k=c%4; l=(32+2*e+2*i-h-k)%7; m=(a+11*h+22*l)//451
