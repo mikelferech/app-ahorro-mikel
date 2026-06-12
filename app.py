@@ -19,7 +19,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.7.6"
+APP_VERSION = "0.7.7"
 APP_UPDATED = "12/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -99,6 +99,10 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem
 .interest-summary{padding:.48rem .65rem;border:1px solid rgba(128,128,128,.25);border-radius:10px;line-height:1.35;display:grid;grid-template-rows:auto auto;gap:.22rem;}
 .interest-summary .is-row{display:flex;align-items:center;justify-content:space-between;gap:.8rem;white-space:nowrap;}
 .interest-summary b{font-weight:900}.interest-summary span{font-weight:850;font-variant-numeric:tabular-nums;}
+
+
+/* Tablas Ahorro: importes por banco en color y diferencia positivo/negativo */
+[data-testid="stDataFrame"] .bank-colored {font-weight:900!important;}
 
 /* Azul MFE también en hover/focus de formularios y botones */
 .stButton > button:hover, .stDownloadButton > button:hover {
@@ -756,10 +760,25 @@ def render_ahorro():
     for i,k in enumerate(keys): chips[i].markdown(f"<div class='bank-chip' style='background:{bank_color(k)}'>{bank_name(k)}</div>", unsafe_allow_html=True)
     table=df.sort_values('Fecha', ascending=False).copy(); table['Mes']=table['Fecha'].apply(month_label)
     show_cols=['Mes']+keys+['Total','Diferencia']
-    show=table[show_cols].rename(columns={k:bank_name(k) for k in keys})
+    raw_show=table[show_cols].rename(columns={k:bank_name(k) for k in keys})
+    show=raw_show.copy()
     for c in show.columns:
         if c!='Mes': show[c]=show[c].apply(euro)
-    st.dataframe(show, hide_index=True, use_container_width=True)
+    try:
+        style_df = pd.DataFrame('', index=show.index, columns=show.columns)
+        for k in keys:
+            col_name = bank_name(k)
+            if col_name in style_df.columns:
+                style_df[col_name] = f'color: {bank_color(k)}; font-weight: 900;'
+        if 'Diferencia' in style_df.columns:
+            diffs = raw_show['Diferencia'].apply(money).tolist()
+            style_df['Diferencia'] = [
+                'color: #22c55e; font-weight: 900;' if v >= 0 else 'color: #ef4444; font-weight: 900;'
+                for v in diffs
+            ]
+        st.dataframe(show.style.apply(lambda _x: style_df, axis=None), hide_index=True, use_container_width=True)
+    except Exception:
+        st.dataframe(show, hide_index=True, use_container_width=True)
     with st.expander('✏️ Editar / borrar saldo', expanded=False):
         labels=table['Mes'].tolist()
         sel_label=st.selectbox('Selecciona mes', labels, key='edit_ah_sel')
@@ -778,6 +797,18 @@ def render_ahorro():
 def load_empresa_config():
     cols=['Nombre','ColorFondo','ColorTexto','LogoArchivo','Pagas','LogoBase64','LogoExt']
     df=read_csv('empresa_config.csv', cols)
+    # Si se acaba de subir un logo en esta sesión, lo mantenemos como fuente prioritaria.
+    session_cfg = st.session_state.get('empresa_cfg_cache')
+    if isinstance(session_cfg, dict) and str(session_cfg.get('LogoBase64') or ''):
+        try:
+            csv_b64 = ''
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                csv_b64 = str(df.iloc[0].to_dict().get('LogoBase64') or '')
+            if not csv_b64 or csv_b64.lower() in ('nan','none'):
+                df = pd.DataFrame([session_cfg], columns=cols)
+                save_csv('empresa_config.csv', df)
+        except Exception:
+            pass
     browser_df = read_browser_df('empresa_config.csv', cols)
 
     # Si el CSV viene de una actualización y vuelve al logo por defecto,
@@ -814,7 +845,17 @@ def load_empresa_config():
     return r
 
 def save_empresa_config(cfg):
-    save_csv('empresa_config.csv', pd.DataFrame([cfg]))
+    # Normaliza y guarda la configuración completa, incluyendo el logo embebido en Base64.
+    cfg = dict(cfg)
+    for k in ['Nombre','ColorFondo','ColorTexto','LogoArchivo','LogoBase64','LogoExt']:
+        cfg[k] = '' if cfg.get(k) is None else str(cfg.get(k))
+    try:
+        cfg['Pagas'] = int(float(cfg.get('Pagas') or 12))
+    except Exception:
+        cfg['Pagas'] = 12
+    df = pd.DataFrame([cfg], columns=['Nombre','ColorFondo','ColorTexto','LogoArchivo','Pagas','LogoBase64','LogoExt'])
+    save_csv('empresa_config.csv', df)
+    st.session_state['empresa_cfg_cache'] = cfg.copy()
 
 def empresa_logo_src(cfg=None):
     cfg=cfg or load_empresa_config()
@@ -857,12 +898,22 @@ def render_empresa_config():
         logo_file=cfg.get('LogoArchivo','vadillo.svg')
         logo_b64=cfg.get('LogoBase64','')
         logo_ext=cfg.get('LogoExt','png')
+
+        # El uploader de Streamlit puede vaciarse tras un rerun. Guardamos el logo pendiente
+        # en session_state hasta que pulses Guardar configuración empresa.
+        pending = st.session_state.get('empresa_logo_pending')
+        if isinstance(pending, dict) and pending.get('LogoBase64'):
+            logo_file = pending.get('LogoArchivo', logo_file)
+            logo_b64 = pending.get('LogoBase64', logo_b64)
+            logo_ext = pending.get('LogoExt', logo_ext)
+
         if up is not None:
             suffix=Path(up.name).suffix.lower() or '.png'
             logo_file='empresa_logo'+suffix
             data=up.getvalue()
             logo_b64=base64.b64encode(data).decode()
             logo_ext=suffix.replace('.','') or 'png'
+            st.session_state['empresa_logo_pending']={'LogoArchivo':logo_file,'LogoBase64':logo_b64,'LogoExt':logo_ext}
             try:
                 Path(logo_file).write_bytes(data)
             except Exception:
@@ -872,7 +923,9 @@ def render_empresa_config():
         if preview_src:
             st.markdown(f"<div class='company-preview' style='background:{fondo};color:{texto}'><img src='{preview_src}'></div>", unsafe_allow_html=True)
         if st.button('💾 Guardar configuración empresa', use_container_width=True, key='emp_save'):
-            save_empresa_config({'Nombre':nombre,'ColorFondo':fondo,'ColorTexto':texto,'LogoArchivo':logo_file,'Pagas':pagas,'LogoBase64':logo_b64,'LogoExt':logo_ext})
+            cfg_to_save={'Nombre':nombre,'ColorFondo':fondo,'ColorTexto':texto,'LogoArchivo':logo_file,'Pagas':pagas,'LogoBase64':logo_b64,'LogoExt':logo_ext}
+            save_empresa_config(cfg_to_save)
+            st.session_state.pop('empresa_logo_pending', None)
             st.success('Configuración de empresa guardada')
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
