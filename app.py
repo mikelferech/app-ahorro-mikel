@@ -19,7 +19,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.7.3"
+APP_VERSION = "0.7.4"
 APP_UPDATED = "12/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -79,8 +79,9 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem
 .row-card{border-bottom:1px solid rgba(128,128,128,.15);padding:.35rem 0;}
 .footer{margin-top:2rem;border-top:1px solid rgba(128,128,128,.22);padding:1rem 0 .2rem;display:flex;align-items:center;justify-content:center;gap:14px;opacity:.8;font-size:.86rem;}
 .footer img{height:24px;width:auto;}
-.app-footer{margin-top:2rem;border-top:1px solid rgba(128,128,128,.22);padding:.75rem 0 .2rem;display:flex;align-items:center;justify-content:space-between;gap:12px;opacity:.82;font-size:.88rem;}
-.footer-meta{opacity:.85;font-weight:650}.footer-user{font-weight:800;opacity:.85}.footer-logout button{font-size:.92rem!important;padding:.2rem .5rem!important;min-height:30px!important;border-color:rgba(128,128,128,.35)!important;}
+.app-footer{margin-top:1.8rem;border-top:1px solid rgba(128,128,128,.22);padding:.75rem 0 .25rem;display:flex;align-items:center;justify-content:center;gap:12px;opacity:.86;font-size:.88rem;white-space:nowrap;}
+.app-footer img{height:22px;width:auto;object-fit:contain;}
+.footer-meta{font-weight:750;opacity:.9}.footer-user{font-weight:850;opacity:.9}.footer-dot{opacity:.45}.footer-logout button{font-size:.90rem!important;padding:.18rem .45rem!important;min-height:28px!important;border-color:rgba(128,128,128,.35)!important;}
 .irpf-desktop{display:block}.irpf-mobile{display:none}
 .irpf-block{border:1px solid rgba(128,128,128,.22);border-radius:12px;overflow:hidden;margin-bottom:1rem}.irpf-block-title{background:#2F3B4F;color:#fff;font-weight:900;font-size:1.15rem;padding:.75rem;border-bottom:2px solid #00a2eb}.irpf-row{display:grid;grid-template-columns:1fr auto;gap:.75rem;padding:.7rem .75rem;border-bottom:1px solid rgba(128,128,128,.18);align-items:center}.irpf-row:last-child{border-bottom:none}.irpf-row .num{font-weight:900;white-space:nowrap;font-variant-numeric:tabular-nums}.irpf-final{padding:.75rem;font-weight:900;text-align:center;border-radius:10px;margin-top:.6rem}
 .company-card{border:1px solid rgba(128,128,128,.22);border-radius:14px;padding:1rem;background:rgba(47,59,79,.18);}
@@ -120,7 +121,7 @@ input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb=
   .desktop-payroll {display:none!important;}
   .mobile-payroll {display:block!important;}
   .irpf-desktop{display:none!important}.irpf-mobile{display:block!important}
-  .app-footer{align-items:flex-start;flex-direction:column;gap:.35rem}.footer-meta{font-size:.82rem}.footer-user{font-size:.86rem}
+  .app-footer{white-space:normal;flex-wrap:wrap;gap:.45rem;font-size:.82rem}.app-footer img{height:18px}.footer-meta{font-size:.82rem}.footer-user{font-size:.84rem}
   .irpf-row{font-size:1rem;}
   .pay-card{border:1px solid rgba(128,128,128,.30); border-radius:14px; padding:.8rem; margin:.7rem 0; background:rgba(47,59,79,.22);} 
   .pay-card.ok{background:rgba(16,185,129,.16);} .pay-card.warn{background:rgba(245,158,11,.16);} .pay-card.bad{background:rgba(220,38,38,.18);} 
@@ -165,6 +166,9 @@ def euro(x):
     return s.replace(',', 'X').replace('.', ',').replace('X','.')
 
 def pct(x): return f"{money(x):.2f}%".replace('.', ',')
+def euro_input_text(x):
+    return f"{money(x):.2f}".replace('.', ',')
+
 
 def month_label(d):
     d=pd.to_datetime(d, errors='coerce')
@@ -208,7 +212,7 @@ def cookie_manager_resource():
     except Exception:
         return None
 
-BROWSER_BACKUP_FILES = {"nominas.csv", "vacaciones.csv", "intereses.csv"}
+BROWSER_BACKUP_FILES = {"nominas.csv", "vacaciones.csv", "intereses.csv", "empresa_config.csv"}
 
 # ---------- browser/local persistence ----------
 def _df_to_json_payload(df):
@@ -612,21 +616,20 @@ def header():
     """, unsafe_allow_html=True)
 
 def footer():
-    c1, c2 = st.columns([7, 3])
+    logo_src = img_src(MFE_FAVICON) or img_src(MFE_LOGO)
+    c1, c2 = st.columns([8, 1])
     with c1:
+        img_html = f"<img src='{logo_src}'>" if logo_src else ""
         st.markdown(
-            f"<div class='footer-meta'>Ahorro Mikel v{APP_VERSION} · Actualizado: {APP_UPDATED}</div>",
+            f"<div class='app-footer'>{img_html}<span class='footer-meta'>Ahorro Mikel v{APP_VERSION} · {APP_UPDATED}</span><span class='footer-dot'>·</span><span class='footer-user'>👤 mikelferech</span></div>",
             unsafe_allow_html=True,
         )
     with c2:
-        a, b = st.columns([3, 1])
-        a.markdown("<div class='footer-user'>👤 mikelferech</div>", unsafe_allow_html=True)
-        with b:
-            st.markdown("<div class='footer-logout'>", unsafe_allow_html=True)
-            if st.button('🚪', help='Cerrar sesión', key='logout_footer_compact'):
-                st.session_state.auth_ok = False
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("<div class='footer-logout'>", unsafe_allow_html=True)
+        if st.button('🚪', help='Cerrar sesión', key='logout_footer_compact'):
+            st.session_state.auth_ok = False
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
 def export_excel_bytes():
     bio=io.BytesIO()
@@ -768,22 +771,37 @@ def render_ahorro():
 
 
 def load_empresa_config():
-    cols=['Nombre','ColorFondo','ColorTexto','LogoArchivo','Pagas']
+    cols=['Nombre','ColorFondo','ColorTexto','LogoArchivo','Pagas','LogoBase64','LogoExt']
     df=read_csv('empresa_config.csv', cols)
     if df.empty:
-        df=pd.DataFrame([{'Nombre':'Vadillo Asesores','ColorFondo':'#111827','ColorTexto':'#FFFFFF','LogoArchivo':'vadillo.svg','Pagas':12}])
+        df=pd.DataFrame([{'Nombre':'Vadillo Asesores','ColorFondo':'#111827','ColorTexto':'#FFFFFF','LogoArchivo':'vadillo.svg','Pagas':12,'LogoBase64':'','LogoExt':'svg'}])
         save_csv('empresa_config.csv', df)
     r=df.iloc[0].to_dict()
     r['Nombre']=str(r.get('Nombre') or 'Empresa')
     r['ColorFondo']=str(r.get('ColorFondo') or '#111827')
     r['ColorTexto']=str(r.get('ColorTexto') or '#FFFFFF')
     r['LogoArchivo']=str(r.get('LogoArchivo') or 'vadillo.svg')
+    r['LogoBase64']='' if pd.isna(r.get('LogoBase64')) else str(r.get('LogoBase64') or '')
+    r['LogoExt']='png' if pd.isna(r.get('LogoExt')) else str(r.get('LogoExt') or 'png').replace('.','')
     try: r['Pagas']=int(float(r.get('Pagas') or 12))
     except Exception: r['Pagas']=12
     return r
 
 def save_empresa_config(cfg):
     save_csv('empresa_config.csv', pd.DataFrame([cfg]))
+
+def empresa_logo_src(cfg=None):
+    cfg=cfg or load_empresa_config()
+    raw=cfg.get('LogoBase64','')
+    if raw and raw.lower() not in ('nan','none'):
+        ext=str(cfg.get('LogoExt') or 'png').replace('.','')
+        if ext=='jpg': ext='jpeg'
+        if ext=='svg': ext='svg+xml'
+        return f"data:image/{ext};base64,{raw}"
+    p=Path(cfg.get('LogoArchivo','vadillo.svg'))
+    if p.exists():
+        return img_src(p)
+    return img_src(VADILLO_LOGO)
 
 def empresa_logo_path():
     cfg=load_empresa_config()
@@ -793,8 +811,7 @@ def empresa_logo_path():
 
 def render_empresa_box():
     cfg=load_empresa_config()
-    logo=empresa_logo_path()
-    logo_src=img_src(logo) if logo.exists() else ''
+    logo_src=empresa_logo_src(cfg)
     if logo_src:
         st.markdown(f"<div class='company-preview' style='background:{cfg['ColorFondo']};color:{cfg['ColorTexto']}'><img src='{logo_src}'></div>", unsafe_allow_html=True)
     else:
@@ -809,18 +826,27 @@ def render_empresa_config():
         fondo=c[1].color_picker('Color fondo', value=cfg['ColorFondo'], key='emp_fondo')
         texto=c[2].color_picker('Color texto', value=cfg['ColorTexto'], key='emp_texto')
         pagas=c[3].selectbox('Pagas', [12,14], index=0 if cfg['Pagas']==12 else 1, key='emp_pagas')
-        st.caption('Recomendaciones logo: PNG o SVG · fondo transparente recomendado · formato horizontal · mínimo 300×100 px · máximo 1 MB.')
+        st.caption('Recomendaciones logo: PNG o SVG · fondo transparente recomendado · formato horizontal · mínimo 300×100 px · máximo 1 MB. El logo se guarda también codificado para que no se pierda al refrescar.')
         up=st.file_uploader('Subir nuevo logo de empresa', type=['png','svg'], key='emp_logo_upload')
         logo_file=cfg.get('LogoArchivo','vadillo.svg')
+        logo_b64=cfg.get('LogoBase64','')
+        logo_ext=cfg.get('LogoExt','png')
         if up is not None:
             suffix=Path(up.name).suffix.lower() or '.png'
             logo_file='empresa_logo'+suffix
-            Path(logo_file).write_bytes(up.getvalue())
-        preview_src=img_src(Path(logo_file)) if Path(logo_file).exists() else img_src(VADILLO_LOGO)
+            data=up.getvalue()
+            logo_b64=base64.b64encode(data).decode()
+            logo_ext=suffix.replace('.','') or 'png'
+            try:
+                Path(logo_file).write_bytes(data)
+            except Exception:
+                pass
+        preview_cfg={'LogoBase64':logo_b64,'LogoExt':logo_ext,'LogoArchivo':logo_file}
+        preview_src=empresa_logo_src(preview_cfg)
         if preview_src:
             st.markdown(f"<div class='company-preview' style='background:{fondo};color:{texto}'><img src='{preview_src}'></div>", unsafe_allow_html=True)
         if st.button('💾 Guardar configuración empresa', use_container_width=True, key='emp_save'):
-            save_empresa_config({'Nombre':nombre,'ColorFondo':fondo,'ColorTexto':texto,'LogoArchivo':logo_file,'Pagas':pagas})
+            save_empresa_config({'Nombre':nombre,'ColorFondo':fondo,'ColorTexto':texto,'LogoArchivo':logo_file,'Pagas':pagas,'LogoBase64':logo_b64,'LogoExt':logo_ext})
             st.success('Configuración de empresa guardada')
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
@@ -1096,10 +1122,13 @@ def render_intereses():
         if clear_key == current_key:
             st.session_state.pop('int_clear_key', None)
         c=st.columns(3)
-        bruto=c[0].number_input('Interés bruto', value=default_bruto, step=.01, format='%.2f', key=f'int_bruto_{year}_{mes}_{banco}')
+        form_ver = st.session_state.get('int_form_ver', 0)
+        bruto_txt=c[0].text_input('Interés bruto', value=euro_input_text(default_bruto), key=f'int_bruto_txt_{year}_{mes}_{banco}_{form_ver}', help='Puedes usar coma decimal: 308,21')
+        bruto=money(bruto_txt)
         ret=bruto*0.19
         neto=bruto-ret
-        ingresado=c[1].number_input('Ingresado', value=default_ing, step=.01, format='%.2f', key=f'int_ingresado_{year}_{mes}_{banco}')
+        ingresado_txt=c[1].text_input('Ingresado', value=euro_input_text(default_ing), key=f'int_ingresado_txt_{year}_{mes}_{banco}_{form_ver}', help='Puedes usar coma decimal: 249,65')
+        ingresado=money(ingresado_txt)
         c[2].markdown(f"<div style='padding:.55rem;border:1px solid rgba(128,128,128,.25);border-radius:10px'><b>Retención 19%</b><br>{euro(ret)}<br><b>Neto esperado</b><br>{euro(neto)}</div>", unsafe_allow_html=True)
         st.info(f'El bruto irá a Rendimiento neto capital mobiliario y la retención a Retenciones capital mobiliario en IRPF. Diferencia con ingreso: {euro(ingresado-neto)}')
         if st.button('Guardar interés', use_container_width=True, key=f'int_save_{year}_{mes}_{banco}'):
@@ -1107,6 +1136,7 @@ def render_intereses():
             base=df[~((df['Anio']==year)&(df['Mes']==mes)&(df['Banco']==banco))].copy()
             save_intereses(pd.concat([base,pd.DataFrame([row])], ignore_index=True))
             st.session_state['int_clear_key'] = f'{year}_{mes}_{banco}'
+            st.session_state['int_form_ver'] = st.session_state.get('int_form_ver', 0) + 1
             st.success('Interés guardado')
             st.rerun()
 
