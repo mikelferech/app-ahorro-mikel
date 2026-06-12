@@ -19,7 +19,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.7.4"
+APP_VERSION = "0.7.5"
 APP_UPDATED = "12/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -79,9 +79,11 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem
 .row-card{border-bottom:1px solid rgba(128,128,128,.15);padding:.35rem 0;}
 .footer{margin-top:2rem;border-top:1px solid rgba(128,128,128,.22);padding:1rem 0 .2rem;display:flex;align-items:center;justify-content:center;gap:14px;opacity:.8;font-size:.86rem;}
 .footer img{height:24px;width:auto;}
-.app-footer{margin-top:1.8rem;border-top:1px solid rgba(128,128,128,.22);padding:.75rem 0 .25rem;display:flex;align-items:center;justify-content:center;gap:12px;opacity:.86;font-size:.88rem;white-space:nowrap;}
-.app-footer img{height:22px;width:auto;object-fit:contain;}
-.footer-meta{font-weight:750;opacity:.9}.footer-user{font-weight:850;opacity:.9}.footer-dot{opacity:.45}.footer-logout button{font-size:.90rem!important;padding:.18rem .45rem!important;min-height:28px!important;border-color:rgba(128,128,128,.35)!important;}
+.app-footer-wrap{margin-top:1.8rem;border-top:1px solid rgba(128,128,128,.22);padding:.65rem 0 .25rem;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;}
+.app-footer{display:flex;align-items:center;justify-content:center;gap:10px;opacity:.88;font-size:.88rem;white-space:nowrap;}
+.app-footer img{height:30px;width:auto;object-fit:contain;}
+.footer-right{display:flex;align-items:center;justify-content:flex-end;gap:10px;opacity:.9;}
+.footer-meta{font-weight:750;opacity:.9}.footer-user{font-weight:850;opacity:.9}.footer-dot{opacity:.45}.footer-logout button{font-size:.95rem!important;padding:.2rem .52rem!important;min-height:30px!important;border-color:rgba(128,128,128,.35)!important;}
 .irpf-desktop{display:block}.irpf-mobile{display:none}
 .irpf-block{border:1px solid rgba(128,128,128,.22);border-radius:12px;overflow:hidden;margin-bottom:1rem}.irpf-block-title{background:#2F3B4F;color:#fff;font-weight:900;font-size:1.15rem;padding:.75rem;border-bottom:2px solid #00a2eb}.irpf-row{display:grid;grid-template-columns:1fr auto;gap:.75rem;padding:.7rem .75rem;border-bottom:1px solid rgba(128,128,128,.18);align-items:center}.irpf-row:last-child{border-bottom:none}.irpf-row .num{font-weight:900;white-space:nowrap;font-variant-numeric:tabular-nums}.irpf-final{padding:.75rem;font-weight:900;text-align:center;border-radius:10px;margin-top:.6rem}
 .company-card{border:1px solid rgba(128,128,128,.22);border-radius:14px;padding:1rem;background:rgba(47,59,79,.18);}
@@ -121,7 +123,7 @@ input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb=
   .desktop-payroll {display:none!important;}
   .mobile-payroll {display:block!important;}
   .irpf-desktop{display:none!important}.irpf-mobile{display:block!important}
-  .app-footer{white-space:normal;flex-wrap:wrap;gap:.45rem;font-size:.82rem}.app-footer img{height:18px}.footer-meta{font-size:.82rem}.footer-user{font-size:.84rem}
+  .app-footer-wrap{grid-template-columns:1fr;gap:.45rem;justify-items:center}.footer-right{justify-content:center}.app-footer{white-space:normal;flex-wrap:wrap;gap:.45rem;font-size:.82rem}.app-footer img{height:24px}.footer-meta{font-size:.82rem}.footer-user{font-size:.84rem}
   .irpf-row{font-size:1rem;}
   .pay-card{border:1px solid rgba(128,128,128,.30); border-radius:14px; padding:.8rem; margin:.7rem 0; background:rgba(47,59,79,.22);} 
   .pay-card.ok{background:rgba(16,185,129,.16);} .pay-card.warn{background:rgba(245,158,11,.16);} .pay-card.bad{background:rgba(220,38,38,.18);} 
@@ -617,14 +619,14 @@ def header():
 
 def footer():
     logo_src = img_src(MFE_FAVICON) or img_src(MFE_LOGO)
-    c1, c2 = st.columns([8, 1])
-    with c1:
-        img_html = f"<img src='{logo_src}'>" if logo_src else ""
-        st.markdown(
-            f"<div class='app-footer'>{img_html}<span class='footer-meta'>Ahorro Mikel v{APP_VERSION} · {APP_UPDATED}</span><span class='footer-dot'>·</span><span class='footer-user'>👤 mikelferech</span></div>",
-            unsafe_allow_html=True,
-        )
-    with c2:
+    img_html = f"<img src='{logo_src}'>" if logo_src else ""
+    st.markdown(
+        f"<div class='app-footer-wrap'><div></div><div class='app-footer'>{img_html}<span class='footer-meta'>Ahorro Mikel v{APP_VERSION} · {APP_UPDATED}</span></div><div class='footer-right'><span class='footer-user'>👤 mikelferech</span><span class='footer-logout-slot'></span></div></div>",
+        unsafe_allow_html=True,
+    )
+    # El botón real se coloca a la derecha del footer usando columnas, para mantener la acción de logout nativa de Streamlit.
+    l, m, r1, r2 = st.columns([7.2, 1.2, 1.1, .5])
+    with r2:
         st.markdown("<div class='footer-logout'>", unsafe_allow_html=True)
         if st.button('🚪', help='Cerrar sesión', key='logout_footer_compact'):
             st.session_state.auth_ok = False
@@ -1111,8 +1113,10 @@ def render_intereses():
         c[2].metric('Neto anual', euro(ydf['NetoEsperado'].sum()))
 
     with st.expander('➕ Añadir / actualizar interés', expanded=True):
-        mes=st.selectbox('Mes', MONTHS_ES, index=date.today().month-1, key='int_mes')
-        banco=st.selectbox('Banco', bank_keys(True), format_func=bank_name, key='int_banco')
+        top=st.columns([1,1])
+        mes=top[0].selectbox('Mes', MONTHS_ES, index=date.today().month-1, key='int_mes')
+        banco=top[1].selectbox('Banco', bank_keys(True), format_func=bank_name, key='int_banco')
+        top[1].markdown(f"<div style='margin-top:-.45rem;font-weight:900;color:{bank_color(banco)}'>● {bank_name(banco)}</div>", unsafe_allow_html=True)
         ex=df[(df['Anio']==year)&(df['Mes']==mes)&(df['Banco']==banco)]
         d=ex.iloc[0].to_dict() if not ex.empty else {}
         clear_key = st.session_state.get('int_clear_key')
@@ -1121,7 +1125,7 @@ def render_intereses():
         default_ing = 0.0 if clear_key == current_key else float(money(d.get('Ingresado',0)))
         if clear_key == current_key:
             st.session_state.pop('int_clear_key', None)
-        c=st.columns(3)
+        c=st.columns([1,1,.9])
         form_ver = st.session_state.get('int_form_ver', 0)
         bruto_txt=c[0].text_input('Interés bruto', value=euro_input_text(default_bruto), key=f'int_bruto_txt_{year}_{mes}_{banco}_{form_ver}', help='Puedes usar coma decimal: 308,21')
         bruto=money(bruto_txt)
@@ -1129,7 +1133,7 @@ def render_intereses():
         neto=bruto-ret
         ingresado_txt=c[1].text_input('Ingresado', value=euro_input_text(default_ing), key=f'int_ingresado_txt_{year}_{mes}_{banco}_{form_ver}', help='Puedes usar coma decimal: 249,65')
         ingresado=money(ingresado_txt)
-        c[2].markdown(f"<div style='padding:.55rem;border:1px solid rgba(128,128,128,.25);border-radius:10px'><b>Retención 19%</b><br>{euro(ret)}<br><b>Neto esperado</b><br>{euro(neto)}</div>", unsafe_allow_html=True)
+        c[2].markdown(f"<div style='padding:.48rem .65rem;border:1px solid rgba(128,128,128,.25);border-radius:10px;line-height:1.28'><b>Retención 19%</b><br>{euro(ret)}<br><b>Neto esperado</b><br>{euro(neto)}</div>", unsafe_allow_html=True)
         st.info(f'El bruto irá a Rendimiento neto capital mobiliario y la retención a Retenciones capital mobiliario en IRPF. Diferencia con ingreso: {euro(ingresado-neto)}')
         if st.button('Guardar interés', use_container_width=True, key=f'int_save_{year}_{mes}_{banco}'):
             row={'Anio':year,'Mes':mes,'Banco':banco,'InteresBruto':bruto,'Saldo':0.0,'Ingresado':ingresado}
