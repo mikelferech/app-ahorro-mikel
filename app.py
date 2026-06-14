@@ -3,6 +3,8 @@ import calendar
 import io
 import re
 import json
+import zipfile
+import html
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -19,8 +21,8 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.7.8"
-APP_UPDATED = "12/06/2026"
+APP_VERSION = "0.8.0"
+APP_UPDATED = "14/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
 MFE_LOGO = Path("mfe_cabecera.png")
@@ -76,6 +78,18 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem
 .logout-inline .user{font-weight:800;opacity:.85;font-size:1rem;}
 .logout-icon button{font-size:1.25rem!important;padding:.25rem .58rem!important;min-height:34px!important;}
 .bank-chip{border-radius:10px;padding:10px 12px;color:white;font-weight:900;text-align:center;margin-bottom:10px;font-size:1.05rem;}
+.bank-icon{height:1.12em;width:1.12em;object-fit:contain;vertical-align:-0.18em;margin-right:.35em;display:inline-block;}
+.account-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:1rem 0 1.2rem;}
+.account-card{border-radius:18px;padding:1rem 1.15rem;color:#fff;font-weight:800;box-shadow:0 8px 24px rgba(0,0,0,.16);}
+.account-card .bank{font-size:1.05rem;opacity:.92;display:flex;align-items:center;gap:.35rem;}
+.account-card .amount{font-size:1.55rem;font-weight:950;margin-top:.35rem;}
+.account-total{border:1px solid rgba(128,128,128,.22);border-radius:18px;padding:1rem 1.15rem;margin:1rem 0;background:rgba(47,59,79,.14);}
+.monthly-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin:.7rem 0 1rem;}
+.month-card{border-radius:16px;padding:.8rem .55rem;text-align:center;font-weight:900;}
+.month-card .m{opacity:.9;font-size:1rem}.month-card .v{font-size:1.15rem;margin-top:.18rem}.month-pos{background:rgba(22,163,74,.26);color:#86efac}.month-neg{background:rgba(220,38,38,.24);color:#fecaca}.month-zero{background:rgba(107,114,128,.22);color:#e5e7eb}
+.backup-card{border:1px solid rgba(128,128,128,.25);border-radius:16px;padding:1rem;background:rgba(47,59,79,.13);margin:.8rem 0;}
+.bank-name-cell{font-weight:900;display:inline-flex;align-items:center;gap:.35rem;}
+
 .row-card{border-bottom:1px solid rgba(128,128,128,.15);padding:.35rem 0;}
 .footer{margin-top:2rem;border-top:1px solid rgba(128,128,128,.22);padding:1rem 0 .2rem;display:flex;align-items:center;justify-content:center;gap:14px;opacity:.8;font-size:.86rem;}
 .footer img{height:24px;width:auto;}
@@ -221,7 +235,7 @@ def cookie_manager_resource():
     except Exception:
         return None
 
-BROWSER_BACKUP_FILES = {"nominas.csv", "vacaciones.csv", "intereses.csv", "empresa_config.csv"}
+BROWSER_BACKUP_FILES = {"nominas.csv", "vacaciones.csv", "intereses.csv", "empresa_config.csv", "bancos.csv"}
 
 # ---------- browser/local persistence ----------
 def _df_to_json_payload(df):
@@ -415,20 +429,68 @@ def logout_button():
 
 # ---------- data ----------
 def load_banks():
-    df=read_csv('bancos.csv', ['Clave','Nombre','Color','Activo','Orden'])
+    cols=['Clave','Nombre','Color','Activo','Orden','IconColor','IconWhite','IconColorBase64','IconWhiteBase64','IconColorExt','IconWhiteExt']
+    df=read_csv('bancos.csv', cols)
     if df.empty:
         df=pd.DataFrame([
-            {'Clave':'BBVA','Nombre':'BBVA','Color':'#072146','Activo':True,'Orden':1},
-            {'Clave':'Openbank','Nombre':'Openbank','Color':'#e40046','Activo':True,'Orden':2},
-            {'Clave':'Cajamar','Nombre':'Cajamar','Color':'#008c95','Activo':True,'Orden':3},
-            {'Clave':'Otros','Nombre':'Otros','Color':'#6b7280','Activo':True,'Orden':4},
+            {'Clave':'BBVA','Nombre':'BBVA','Color':'#072146','Activo':True,'Orden':1,'IconColor':'bbva_color.png','IconWhite':'bbva_white.png','IconColorBase64':'','IconWhiteBase64':'','IconColorExt':'png','IconWhiteExt':'png'},
+            {'Clave':'Openbank','Nombre':'Openbank','Color':'#e40046','Activo':True,'Orden':2,'IconColor':'openbank_color.png','IconWhite':'openbank_white.png','IconColorBase64':'','IconWhiteBase64':'','IconColorExt':'png','IconWhiteExt':'png'},
+            {'Clave':'Cajamar','Nombre':'Cajamar','Color':'#008c95','Activo':True,'Orden':3,'IconColor':'cajamar_color.png','IconWhite':'cajamar_white.png','IconColorBase64':'','IconWhiteBase64':'','IconColorExt':'png','IconWhiteExt':'png'},
+            {'Clave':'Otros','Nombre':'Otros','Color':'#6b7280','Activo':True,'Orden':4,'IconColor':'','IconWhite':'','IconColorBase64':'','IconWhiteBase64':'','IconColorExt':'png','IconWhiteExt':'png'},
         ]); save_csv('bancos.csv', df)
+    # Migración desde versiones antiguas sin iconos
+    defaults={
+        'BBVA':('bbva_color.png','bbva_white.png'),
+        'Openbank':('openbank_color.png','openbank_white.png'),
+        'Cajamar':('cajamar_color.png','cajamar_white.png'),
+        'Otros':('','')
+    }
+    for c in cols:
+        if c not in df: df[c]=''
     df['Clave']=df['Clave'].astype(str).apply(safe_key)
     df['Nombre']=df['Nombre'].fillna(df['Clave']).astype(str)
     df['Color']=df['Color'].fillna('#6b7280').astype(str)
     df['Activo']=df['Activo'].astype(str).str.lower().isin(['true','1','sí','si','yes'])
     df['Orden']=pd.to_numeric(df['Orden'], errors='coerce').fillna(99).astype(int)
+    for i,r in df.iterrows():
+        key=str(r['Clave'])
+        if key in defaults:
+            if not str(r.get('IconColor') or '').strip() or str(r.get('IconColor')).lower() in ('nan','none'):
+                df.at[i,'IconColor']=defaults[key][0]
+            if not str(r.get('IconWhite') or '').strip() or str(r.get('IconWhite')).lower() in ('nan','none'):
+                df.at[i,'IconWhite']=defaults[key][1]
+        for c in ['IconColor','IconWhite','IconColorBase64','IconWhiteBase64','IconColorExt','IconWhiteExt']:
+            val=df.at[i,c]
+            df.at[i,c]='' if pd.isna(val) else str(val)
     return df.drop_duplicates('Clave').sort_values('Orden')
+
+def _bank_row(k):
+    df=load_banks(); r=df[df['Clave']==k]
+    return None if r.empty else r.iloc[0].to_dict()
+
+def bank_icon_src(k, white=False):
+    r=_bank_row(k)
+    if not r: return ''
+    b64_key='IconWhiteBase64' if white else 'IconColorBase64'
+    ext_key='IconWhiteExt' if white else 'IconColorExt'
+    file_key='IconWhite' if white else 'IconColor'
+    raw=str(r.get(b64_key) or '')
+    if raw and raw.lower() not in ('nan','none'):
+        ext=str(r.get(ext_key) or 'png').replace('.','')
+        if ext=='jpg': ext='jpeg'
+        if ext=='svg': ext='svg+xml'
+        return f"data:image/{ext};base64,{raw}"
+    f=str(r.get(file_key) or '')
+    if f and f.lower() not in ('nan','none') and Path(f).exists():
+        return img_src(Path(f))
+    return ''
+
+def bank_icon_html(k, white=False, size=None):
+    src=bank_icon_src(k, white=white)
+    if not src: return ''
+    style=f"height:{size}px;width:{size}px;" if size else ''
+    alt=html.escape(bank_name(k))
+    return f"<img class='bank-icon' style='{style}' src='{src}' alt='{alt}'>"
 
 def bank_keys(active_only=False):
     df=load_banks();
@@ -652,34 +714,62 @@ def export_excel_bytes():
         read_csv('festivos.csv').to_excel(writer, sheet_name='Festivos', index=False)
     bio.seek(0); return bio.getvalue()
 
+def _save_uploaded_icon(uploaded, clave, kind, existing_path='', existing_b64='', existing_ext='png'):
+    if uploaded is None:
+        return existing_path or '', existing_b64 or '', existing_ext or 'png'
+    data=uploaded.getvalue()
+    suffix=Path(uploaded.name).suffix.lower() or '.png'
+    ext=suffix.replace('.','') or 'png'
+    filename=f"bank_{safe_key(clave).lower()}_{kind}{suffix}"
+    try:
+        Path(filename).write_bytes(data)
+    except Exception:
+        pass
+    return filename, base64.b64encode(data).decode(), ext
+
 def render_bank_config(prefix='bank_config'):
     with st.expander('⚙️ Configuración de bancos', expanded=False):
         cfg=load_banks().reset_index(drop=True)
-        st.caption('Edita nombres, colores, orden, activa/oculta o añade bancos. Los datos históricos no se pierden.')
+        st.caption('Edita nombres, colores, iconos, orden, activa/oculta o añade bancos. Recomendado: PNG 128×128 transparente. Sube logo color y logo blanco.')
         rows=[]
         for i,r in cfg.iterrows():
-            c=st.columns([1.1,1.8,1.3,.8,.8,.55])
-            clave=c[0].text_input('Clave', value=r['Clave'], key=f'{prefix}_clave_{i}', label_visibility='collapsed')
-            nombre=c[1].text_input('Nombre', value=r['Nombre'], key=f'{prefix}_nombre_{i}', label_visibility='collapsed')
-            color=c[2].color_picker('Color', value=str(r['Color']), key=f'{prefix}_color_{i}', label_visibility='collapsed')
-            activo=c[3].checkbox('Activo', value=bool(r['Activo']), key=f'{prefix}_act_{i}', label_visibility='collapsed')
-            orden=c[4].number_input('Orden', value=int(r['Orden']), step=1, key=f'{prefix}_orden_{i}', label_visibility='collapsed')
+            st.markdown(f"<div class='row-card'>{bank_icon_html(r['Clave'], white=False, size=22)}<b>{html.escape(str(r['Nombre']))}</b></div>", unsafe_allow_html=True)
+            c=st.columns([1.0,1.45,1.0,.65,.65,.55])
+            clave=c[0].text_input('Clave', value=r['Clave'], key=f'{prefix}_clave_{i}')
+            nombre=c[1].text_input('Nombre', value=r['Nombre'], key=f'{prefix}_nombre_{i}')
+            color=c[2].color_picker('Color', value=str(r['Color']), key=f'{prefix}_color_{i}')
+            activo=c[3].checkbox('Activo', value=bool(r['Activo']), key=f'{prefix}_act_{i}')
+            orden=c[4].number_input('Orden', value=int(r['Orden']), step=1, key=f'{prefix}_orden_{i}')
             borrar=c[5].button('❌', key=f'{prefix}_del_{i}', help='Eliminar banco')
+            ic=st.columns(2)
+            up_color=ic[0].file_uploader('Logo color', type=['png','svg'], key=f'{prefix}_icon_color_{i}')
+            up_white=ic[1].file_uploader('Logo blanco', type=['png','svg'], key=f'{prefix}_icon_white_{i}')
+            icon_color, icon_color_b64, icon_color_ext = _save_uploaded_icon(up_color, clave, 'color', r.get('IconColor',''), r.get('IconColorBase64',''), r.get('IconColorExt','png'))
+            icon_white, icon_white_b64, icon_white_ext = _save_uploaded_icon(up_white, clave, 'white', r.get('IconWhite',''), r.get('IconWhiteBase64',''), r.get('IconWhiteExt','png'))
             if not borrar:
-                rows.append({'Clave':safe_key(clave),'Nombre':nombre or clave,'Color':color,'Activo':activo,'Orden':orden})
+                rows.append({'Clave':safe_key(clave),'Nombre':nombre or clave,'Color':color,'Activo':activo,'Orden':orden,
+                             'IconColor':icon_color,'IconWhite':icon_white,'IconColorBase64':icon_color_b64,'IconWhiteBase64':icon_white_b64,
+                             'IconColorExt':icon_color_ext,'IconWhiteExt':icon_white_ext})
         st.divider()
-        c=st.columns([1.1,1.8,1.3,.8,.8])
+        st.markdown('**➕ Añadir banco nuevo**')
+        c=st.columns([1.1,1.8,1.1,.7,.7])
         n_clave=c[0].text_input('Nueva clave', key=f'{prefix}_new_clave')
         n_nombre=c[1].text_input('Nuevo nombre', key=f'{prefix}_new_nombre')
         n_color=c[2].color_picker('Nuevo color', value='#6b7280', key=f'{prefix}_new_color')
         n_act=c[3].checkbox('Mostrar', value=True, key=f'{prefix}_new_act')
         n_order=c[4].number_input('Orden nuevo', value=len(cfg)+1, step=1, key=f'{prefix}_new_order')
+        ic=st.columns(2)
+        n_icon_color=ic[0].file_uploader('Logo color nuevo', type=['png','svg'], key=f'{prefix}_new_icon_color')
+        n_icon_white=ic[1].file_uploader('Logo blanco nuevo', type=['png','svg'], key=f'{prefix}_new_icon_white')
         if st.button('Guardar configuración de bancos', use_container_width=True, key=f'{prefix}_save'):
             if n_clave or n_nombre:
-                rows.append({'Clave':safe_key(n_clave or n_nombre),'Nombre':n_nombre or n_clave,'Color':n_color,'Activo':n_act,'Orden':n_order})
+                new_clave=safe_key(n_clave or n_nombre)
+                icp, icb64, icext=_save_uploaded_icon(n_icon_color, new_clave, 'color')
+                iwp, iwb64, iwext=_save_uploaded_icon(n_icon_white, new_clave, 'white')
+                rows.append({'Clave':new_clave,'Nombre':n_nombre or n_clave,'Color':n_color,'Activo':n_act,'Orden':n_order,
+                             'IconColor':icp,'IconWhite':iwp,'IconColorBase64':icb64,'IconWhiteBase64':iwb64,'IconColorExt':icext,'IconWhiteExt':iwext})
             out=pd.DataFrame(rows).drop_duplicates('Clave', keep='last').sort_values('Orden')
             save_csv('bancos.csv', out)
-            # add new bank cols to ahorro if needed
             a=load_ahorro()
             for k in out['Clave']:
                 if k not in a: a[k]=0.0
@@ -732,9 +822,134 @@ def charts(df, prefix="chart"):
     fig2.update_layout(title=title, height=520, margin=dict(l=15,r=15,t=45,b=15))
     c2.plotly_chart(fig2, use_container_width=True, key=f"{prefix}_diferencia")
 
+def latest_valid_ahorro(df):
+    if df.empty: return None
+    v=df[df['Total']>0].sort_values('Fecha')
+    if v.empty: return None
+    return v.iloc[-1]
+
+def render_account_cards(df):
+    last=latest_valid_ahorro(df)
+    if last is None: return
+    keys=bank_keys(True)
+    st.markdown(f"<div class='account-total'><b>💳 Último mes registrado · {month_label(last['Fecha'])}</b><br><span style='font-size:1.45rem;font-weight:950'>Total: {euro(last['Total'])}</span></div>", unsafe_allow_html=True)
+    cards=[]
+    for k in keys:
+        val=money(last.get(k,0))
+        # Mostramos activos aunque estén a cero, pero las tarjetas con dinero primero.
+        cards.append((k,val))
+    cards=sorted(cards, key=lambda x: x[1], reverse=True)
+    html_cards="<div class='account-grid'>"
+    for k,val in cards:
+        icon=bank_icon_html(k, white=True, size=24)
+        name=html.escape(bank_name(k))
+        html_cards += f"<div class='account-card' style='background:{bank_color(k)}'><div class='bank'>{icon}{name} · {month_label(last['Fecha'])}</div><div class='amount'>{euro(val)}</div></div>"
+    html_cards += "</div>"
+    st.markdown(html_cards, unsafe_allow_html=True)
+    prev=df[df['Fecha'] < last['Fecha']].sort_values('Fecha')
+    if not prev.empty:
+        p=prev.iloc[-1]
+        diff=money(last['Total'])-money(p['Total'])
+        pctv=diff/money(p['Total'])*100 if money(p['Total']) else 0
+        col='#22c55e' if diff>=0 else '#ef4444'
+        st.markdown(f"<div style='color:{col};font-weight:900;margin:.3rem 0 1rem'>Variación respecto a {month_label(p['Fecha'])}: {euro(diff)} ({pctv:+.2f}%)</div>".replace('.', ','), unsafe_allow_html=True)
+
+def render_bank_distribution(df):
+    last=latest_valid_ahorro(df)
+    if last is None: return
+    keys=[k for k in bank_keys(True) if money(last.get(k,0))>0]
+    if not keys: return
+    labels=[bank_name(k) for k in keys]
+    values=[money(last.get(k,0)) for k in keys]
+    colors=[bank_color(k) for k in keys]
+    fig=go.Figure(go.Pie(labels=labels, values=values, hole=.58, marker=dict(colors=colors), textinfo='label+percent', hovertemplate='%{label}<br>%{value:,.2f} €<extra></extra>'))
+    fig.update_layout(title=f'Distribución por banco · {month_label(last["Fecha"])}', height=420, margin=dict(l=15,r=15,t=45,b=15), showlegend=True)
+    st.plotly_chart(fig, use_container_width=True, key='dashboard_distribution_bancos')
+
+def _monthly_current_year(df):
+    if df.empty: return pd.DataFrame()
+    v=df[df['Total']>0].sort_values('Fecha').copy()
+    if v.empty: return pd.DataFrame()
+    latest_year=pd.to_datetime(v['Fecha']).dt.year.max()
+    y=v[pd.to_datetime(v['Fecha']).dt.year==latest_year].copy()
+    y['MonthNum']=pd.to_datetime(y['Fecha']).dt.month
+    y=y.drop_duplicates('MonthNum', keep='last').sort_values('MonthNum')
+    return y
+
+def render_monthly_cards(df):
+    y=_monthly_current_year(df)
+    if y.empty: return
+    y=y.copy()
+    y['Acum']=y['Diferencia'].cumsum()
+    st.markdown('### Ahorro mensual')
+    html_m="<div class='monthly-grid'>"
+    for _,r in y.iterrows():
+        val=money(r['Diferencia']); cls='month-pos' if val>0 else ('month-neg' if val<0 else 'month-zero')
+        html_m += f"<div class='month-card {cls}'><div class='m'>{MONTHS_ES[int(r['MonthNum'])-1].title()}</div><div class='v'>{euro(val)}</div></div>"
+    html_m += '</div>'
+    st.markdown(html_m, unsafe_allow_html=True)
+    st.markdown('### Ahorro mensual acumulado')
+    html_a="<div class='monthly-grid'>"
+    for _,r in y.iterrows():
+        val=money(r['Acum']); cls='month-pos' if val>0 else ('month-neg' if val<0 else 'month-zero')
+        html_a += f"<div class='month-card {cls}'><div class='m'>{MONTHS_ES[int(r['MonthNum'])-1].title()}</div><div class='v'>{euro(val)}</div></div>"
+    html_a += '</div>'
+    st.markdown(html_a, unsafe_allow_html=True)
+
+def create_backup_bytes():
+    files=['ahorro.csv','bancos.csv','nominas.csv','vacaciones.csv','intereses.csv','festivos.csv','irpf_overrides.csv','empresa_config.csv','saldos.xlsx','mfe_cabecera.png','mfe_favicon.png']
+    # Incluye iconos personalizados y bancos si existen.
+    for pat in ['bank_*.*','bbva_*.png','openbank_*.png','cajamar_*.png','empresa_logo.*']:
+        for f in Path('.').glob(pat):
+            if f.is_file() and f.name not in files:
+                files.append(f.name)
+    bio=io.BytesIO()
+    with zipfile.ZipFile(bio, 'w', zipfile.ZIP_DEFLATED) as z:
+        info={'app':'Ahorro Mikel','version':APP_VERSION,'fecha':APP_UPDATED,'creado':datetime.now().isoformat(timespec='seconds')}
+        z.writestr('backup_info.json', json.dumps(info, ensure_ascii=False, indent=2))
+        for name in files:
+            f=Path(name)
+            if f.exists() and f.is_file():
+                z.write(f, arcname=f.name)
+    bio.seek(0)
+    return bio.getvalue()
+
+def restore_backup(upload):
+    allowed={'ahorro.csv','bancos.csv','nominas.csv','vacaciones.csv','intereses.csv','festivos.csv','irpf_overrides.csv','empresa_config.csv','saldos.xlsx','mfe_cabecera.png','mfe_favicon.png'}
+    prefixes=('bank_','bbva_','openbank_','cajamar_','empresa_logo')
+    data=upload.getvalue()
+    with zipfile.ZipFile(io.BytesIO(data),'r') as z:
+        for n in z.namelist():
+            base=Path(n).name
+            if base in allowed or base.startswith(prefixes):
+                Path(base).write_bytes(z.read(n))
+    # Limpia caché en memoria para recargar desde ficheros restaurados.
+    memory_store().clear()
+
+def render_backup():
+    st.header('💾 Backup')
+    st.markdown("<div class='backup-card'><b>Exporta todos los datos de Ahorro Mikel</b><br>Incluye saldos, bancos, iconos, nóminas, vacaciones, intereses, IRPF y configuración.</div>", unsafe_allow_html=True)
+    st.download_button('📥 Descargar backup completo', data=create_backup_bytes(), file_name=f"Ahorro_Mikel_Backup_{date.today().isoformat()}.zip", mime='application/zip', use_container_width=True)
+    st.divider()
+    st.subheader('📤 Restaurar backup')
+    up=st.file_uploader('Sube un backup ZIP de Ahorro Mikel', type=['zip'], key='restore_backup_zip')
+    confirm=st.checkbox('Entiendo que esto reemplazará los datos actuales', key='restore_confirm')
+    if up is not None and confirm and st.button('Restaurar backup', use_container_width=True):
+        restore_backup(up)
+        st.success('Backup restaurado. Recargando app...')
+        st.rerun()
+
 def render_dashboard():
     st.header('📊 Dashboard')
-    df=load_ahorro(); kpis(df); charts(df, "dashboard")
+    df=load_ahorro()
+    kpis(df)
+    render_account_cards(df)
+    c1,c2=st.columns([1.1,1])
+    with c1:
+        charts(df, "dashboard")
+    with c2:
+        render_bank_distribution(df)
+    render_monthly_cards(df)
     st.download_button('⬇️ Descargar Excel actualizado', data=export_excel_bytes(), file_name='Ahorro_Mikel_actualizado.xlsx', use_container_width=False)
 
 def render_ahorro():
@@ -757,7 +972,7 @@ def render_ahorro():
     charts(df, "ahorro")
     st.subheader('Tabla de saldos')
     chips=st.columns(max(1,len(keys)))
-    for i,k in enumerate(keys): chips[i].markdown(f"<div class='bank-chip' style='background:{bank_color(k)}'>{bank_name(k)}</div>", unsafe_allow_html=True)
+    for i,k in enumerate(keys): chips[i].markdown(f"<div class='bank-chip' style='background:{bank_color(k)}'>{bank_icon_html(k, white=True, size=22)}{bank_name(k)}</div>", unsafe_allow_html=True)
     table=df.sort_values('Fecha', ascending=False).copy(); table['Mes']=table['Fecha'].apply(month_label)
     show_cols=['Mes']+keys+['Total','Diferencia']
     raw_show=table[show_cols].rename(columns={k:bank_name(k) for k in keys})
@@ -942,6 +1157,16 @@ def render_nominas():
     df=load_nominas()
     years=list(range(date.today().year-2,date.today().year+9))
     year=st.selectbox('Año', years, index=years.index(date.today().year) if date.today().year in years else 2, key='nom_year')
+
+    vac_year = load_vacaciones()
+    try:
+        vac_year = vac_year[pd.to_numeric(vac_year['Anio'], errors='coerce').fillna(0).astype(int)==year]
+    except Exception:
+        vac_year = pd.DataFrame()
+    used = int(pd.to_numeric(vac_year.get('Dias', pd.Series(dtype=float)), errors='coerce').fillna(0).sum()) if not vac_year.empty else 0
+    remaining = VACACIONES_ANUALES - used
+    prog = min(100, max(0, used / VACACIONES_ANUALES * 100)) if VACACIONES_ANUALES else 0
+    st.markdown(f"<div class='account-total'><b>🌴 Vacaciones {year}</b><br>Consumidas: <b>{used}</b> · Restantes: <b>{remaining}</b> · Disponibles: <b>{VACACIONES_ANUALES}</b><div style='height:10px;border-radius:999px;background:rgba(128,128,128,.22);margin-top:.55rem;overflow:hidden'><div style='height:100%;width:{prog:.1f}%;background:#00a2eb'></div></div></div>", unsafe_allow_html=True)
 
     with st.expander('⚙️ Generar 12 nóminas del año', expanded=True):
         st.caption('Rellena una plantilla mensual una vez y crea ENE-DIC. Después, cada mes solo introduces lo ingresado y la app comprueba si coincide.')
@@ -1229,18 +1454,14 @@ def render_intereses():
         order={m:i for i,m in enumerate(MONTHS_ES)}
         ydf['_o']=ydf['Mes'].map(order).fillna(99); ydf=ydf.sort_values(['_o','Banco']).drop(columns=['_o'])
         st.subheader('Tabla de intereses')
-        show=ydf[['Mes','Banco','InteresBruto','Retencion','NetoEsperado','Ingresado','Diferencia']].copy()
-        bank_keys_for_style = show['Banco'].tolist()
-        show['Banco']=show['Banco'].apply(bank_name)
-        for c in ['InteresBruto','Retencion','NetoEsperado','Ingresado','Diferencia']:
-            show[c]=show[c].apply(euro)
-        show=show.rename(columns={'InteresBruto':'Interés bruto','Retencion':'Retención 19%','NetoEsperado':'Neto esperado'})
-        try:
-            style_df = pd.DataFrame('', index=show.index, columns=show.columns)
-            style_df['Banco'] = [f'color: {bank_color(k)}; font-weight: 900;' for k in bank_keys_for_style]
-            st.dataframe(show.style.apply(lambda _x: style_df, axis=None), hide_index=True, use_container_width=True)
-        except Exception:
-            st.dataframe(show, hide_index=True, use_container_width=True)
+        html_tbl="<table class='irpf-table'><tr><th>Mes</th><th>Banco</th><th>Interés bruto</th><th>Retención 19%</th><th>Neto esperado</th><th>Ingresado</th><th>Diferencia</th></tr>"
+        for _,r in ydf.iterrows():
+            k=str(r.get('Banco',''))
+            bcell=f"<span class='bank-name-cell' style='color:{bank_color(k)}'>{bank_icon_html(k, white=False, size=20)}{html.escape(bank_name(k))}</span>"
+            diff=money(r.get('Diferencia',0)); dcol='#22c55e' if diff>=0 else '#ef4444'
+            html_tbl += f"<tr><td>{html.escape(str(r.get('Mes','')))}</td><td>{bcell}</td><td class='irpf-num'>{euro(r.get('InteresBruto',0))}</td><td class='irpf-num'>{euro(r.get('Retencion',0))}</td><td class='irpf-num'>{euro(r.get('NetoEsperado',0))}</td><td class='irpf-num'>{euro(r.get('Ingresado',0))}</td><td class='irpf-num' style='color:{dcol};font-weight:900'>{euro(diff)}</td></tr>"
+        html_tbl += "</table>"
+        st.markdown(html_tbl, unsafe_allow_html=True)
 
         with st.expander('✏️ Editar / borrar intereses', expanded=False):
             edit=ydf[['Mes','Banco','InteresBruto','Ingresado']].copy().reset_index(drop=True)
@@ -1326,10 +1547,11 @@ def render_irpf():
     st.markdown(html+mobile, unsafe_allow_html=True)
 
 login_gate(); header()
-tabs=st.tabs(['Dashboard','Ahorro','Nóminas','Intereses','IRPF'])
+tabs=st.tabs(['Dashboard','Ahorro','Nóminas','Intereses','IRPF','Backup'])
 with tabs[0]: render_dashboard()
 with tabs[1]: render_ahorro()
 with tabs[2]: render_nominas()
 with tabs[3]: render_intereses()
 with tabs[4]: render_irpf()
+with tabs[5]: render_backup()
 footer()
