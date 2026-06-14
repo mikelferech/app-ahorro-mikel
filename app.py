@@ -11,6 +11,7 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 try:
     from streamlit_js_eval import streamlit_js_eval
 except Exception:
@@ -21,7 +22,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.8.0"
+APP_VERSION = "0.8.1"
 APP_UPDATED = "14/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -40,6 +41,30 @@ def get_page_icon():
     return "💰"
 
 st.set_page_config(page_title=APP_TITLE, page_icon=get_page_icon(), layout="wide", initial_sidebar_state="collapsed")
+
+# Intenta forzar nombre, favicon y manifiesto PWA en navegadores compatibles.
+# En Streamlit Cloud no siempre se respeta al 100%, pero ayuda en Chrome/Android.
+components.html("""
+<script>
+(function(){
+  const d = window.parent.document;
+  d.title = 'Ahorro Mikel';
+  function upsert(tag, attrs){
+    let q = tag;
+    if(attrs.rel) q += '[rel="'+attrs.rel+'"]';
+    let el = d.querySelector(q);
+    if(!el){ el = d.createElement(tag); d.head.appendChild(el); }
+    Object.entries(attrs).forEach(([k,v]) => el.setAttribute(k,v));
+  }
+  upsert('link', {rel:'icon', href:'mfe_favicon.png?v=081', type:'image/png'});
+  upsert('link', {rel:'apple-touch-icon', href:'mfe_icon_192.png?v=081'});
+  upsert('link', {rel:'manifest', href:'manifest.json?v=081'});
+  upsert('meta', {name:'theme-color', content:'#00a2eb'});
+  upsert('meta', {name:'apple-mobile-web-app-title', content:'Ahorro Mikel'});
+  upsert('meta', {name:'application-name', content:'Ahorro Mikel'});
+})();
+</script>
+""", height=0, width=0)
 
 st.markdown("""
 <style>
@@ -78,7 +103,7 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem
 .logout-inline .user{font-weight:800;opacity:.85;font-size:1rem;}
 .logout-icon button{font-size:1.25rem!important;padding:.25rem .58rem!important;min-height:34px!important;}
 .bank-chip{border-radius:10px;padding:10px 12px;color:white;font-weight:900;text-align:center;margin-bottom:10px;font-size:1.05rem;}
-.bank-icon{height:1.12em;width:1.12em;object-fit:contain;vertical-align:-0.18em;margin-right:.35em;display:inline-block;}
+.bank-icon{height:1.18em;width:1.18em;object-fit:contain;vertical-align:-0.20em;margin-right:.38em;display:inline-block;}
 .account-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:1rem 0 1.2rem;}
 .account-card{border-radius:18px;padding:1rem 1.15rem;color:#fff;font-weight:800;box-shadow:0 8px 24px rgba(0,0,0,.16);}
 .account-card .bank{font-size:1.05rem;opacity:.92;display:flex;align-items:center;gap:.35rem;}
@@ -787,15 +812,17 @@ def kpis(df):
     if keys: cols[2].metric(bank_name(keys[0]), euro(last.get(keys[0],0)))
     if len(keys)>1: cols[3].metric(' + '.join(bank_name(k) for k in keys[1:3]), euro(sum(money(last.get(k,0)) for k in keys[1:3])))
 
-def charts(df, prefix="chart"):
+def render_patrimonio_chart(df, prefix="chart"):
     if df.empty: return
     df=df.sort_values('Fecha').copy(); df['Mes']=df['Fecha'].apply(month_label)
-    c1,c2=st.columns(2)
     fig=go.Figure(go.Scatter(x=df['Mes'], y=df['Total'], mode='lines+markers'))
     fig.update_layout(title='Patrimonio histórico', height=520, margin=dict(l=15,r=15,t=45,b=15))
-    c1.plotly_chart(fig, use_container_width=True, key=f"{prefix}_patrimonio")
+    st.plotly_chart(fig, use_container_width=True, key=f"{prefix}_patrimonio")
 
-    mode = c2.selectbox('Vista +/- mensual', ['Marcar gasto extraordinario', 'Zoom normal', 'Completa'], key=f'{prefix}_diff_mode')
+def render_diff_chart(df, prefix="chart"):
+    if df.empty: return
+    df=df.sort_values('Fecha').copy(); df['Mes']=df['Fecha'].apply(month_label)
+    mode = st.selectbox('Vista +/- mensual', ['Marcar gasto extraordinario', 'Zoom normal', 'Completa'], key=f'{prefix}_diff_mode')
     diffs = df['Diferencia'].astype(float)
     colors=['#16a34a' if v>=0 else '#dc2626' for v in diffs]
     fig2=go.Figure(go.Bar(x=df['Mes'], y=diffs, marker_color=colors, customdata=diffs, hovertemplate='%{x}<br>%{customdata:,.2f} €<extra></extra>'))
@@ -820,7 +847,15 @@ def charts(df, prefix="chart"):
         for _,r in outliers.iterrows():
             fig2.add_annotation(x=r['Mes'], y=0.04, yref='paper', text='⬇️ Gasto extraordinario', showarrow=False, font=dict(size=13, color='#fca5a5'), bgcolor='rgba(17,24,39,.65)', bordercolor='rgba(252,165,165,.5)', borderwidth=1)
     fig2.update_layout(title=title, height=520, margin=dict(l=15,r=15,t=45,b=15))
-    c2.plotly_chart(fig2, use_container_width=True, key=f"{prefix}_diferencia")
+    st.plotly_chart(fig2, use_container_width=True, key=f"{prefix}_diferencia")
+
+def charts(df, prefix="chart"):
+    if df.empty: return
+    c1,c2=st.columns(2)
+    with c1:
+        render_patrimonio_chart(df, prefix)
+    with c2:
+        render_diff_chart(df, prefix)
 
 def latest_valid_ahorro(df):
     if df.empty: return None
@@ -833,12 +868,11 @@ def render_account_cards(df):
     if last is None: return
     keys=bank_keys(True)
     st.markdown(f"<div class='account-total'><b>💳 Último mes registrado · {month_label(last['Fecha'])}</b><br><span style='font-size:1.45rem;font-weight:950'>Total: {euro(last['Total'])}</span></div>", unsafe_allow_html=True)
+    # Respeta el orden definido en Configuración de bancos.
     cards=[]
     for k in keys:
         val=money(last.get(k,0))
-        # Mostramos activos aunque estén a cero, pero las tarjetas con dinero primero.
         cards.append((k,val))
-    cards=sorted(cards, key=lambda x: x[1], reverse=True)
     html_cards="<div class='account-grid'>"
     for k,val in cards:
         icon=bank_icon_html(k, white=True, size=24)
@@ -861,9 +895,14 @@ def render_bank_distribution(df):
     if not keys: return
     labels=[bank_name(k) for k in keys]
     values=[money(last.get(k,0)) for k in keys]
+    total=sum(values) or 1
     colors=[bank_color(k) for k in keys]
-    fig=go.Figure(go.Pie(labels=labels, values=values, hole=.58, marker=dict(colors=colors), textinfo='label+percent', hovertemplate='%{label}<br>%{value:,.2f} €<extra></extra>'))
-    fig.update_layout(title=f'Distribución por banco · {month_label(last["Fecha"])}', height=420, margin=dict(l=15,r=15,t=45,b=15), showlegend=True)
+    # Oculta etiquetas muy pequeñas en el donut, pero mantiene el banco en la leyenda.
+    texts=[f"{lab}<br>{val/total*100:.1f}%" if (val/total*100)>=3 else '' for lab,val in zip(labels,values)]
+    fig=go.Figure(go.Pie(labels=labels, values=values, hole=.58, marker=dict(colors=colors), text=texts, textinfo='text', hovertemplate='%{label}<br>%{value:,.2f} €<extra></extra>'))
+    fig.update_layout(title=f'Distribución por banco · {month_label(last["Fecha"])}', height=420, margin=dict(l=5,r=5,t=45,b=5), showlegend=True)
+    if any((v/total*100)<3 for v in values):
+        fig.add_annotation(x=1.18, y=0.05, xref='paper', yref='paper', showarrow=False, align='left', font=dict(size=11, color='#9ca3af'), text='* Etiquetas <3% solo en leyenda')
     st.plotly_chart(fig, use_container_width=True, key='dashboard_distribution_bancos')
 
 def _monthly_current_year(df):
@@ -944,10 +983,13 @@ def render_dashboard():
     df=load_ahorro()
     kpis(df)
     render_account_cards(df)
-    c1,c2=st.columns([1.1,1])
+    # Dos primeros gráficos más anchos; donut más estrecho.
+    c1,c2,c3=st.columns([1.25,1.25,.82])
     with c1:
-        charts(df, "dashboard")
+        render_patrimonio_chart(df, "dashboard")
     with c2:
+        render_diff_chart(df, "dashboard")
+    with c3:
         render_bank_distribution(df)
     render_monthly_cards(df)
     st.download_button('⬇️ Descargar Excel actualizado', data=export_excel_bytes(), file_name='Ahorro_Mikel_actualizado.xlsx', use_container_width=False)
