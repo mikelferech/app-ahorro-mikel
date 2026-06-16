@@ -22,7 +22,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.8.1"
+APP_VERSION = "0.8.2"
 APP_UPDATED = "14/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -454,40 +454,87 @@ def logout_button():
 
 # ---------- data ----------
 def load_banks():
+    """Carga bancos de forma robusta.
+
+    v0.8.2: evita que una fila nueva/incompleta (por ejemplo al crear Revolut)
+    rompa toda la app. Normaliza columnas antiguas y nuevas, rellena nulos y
+    reconstruye el DataFrame desde diccionarios para evitar errores de dtype de pandas.
+    """
     cols=['Clave','Nombre','Color','Activo','Orden','IconColor','IconWhite','IconColorBase64','IconWhiteBase64','IconColorExt','IconWhiteExt']
-    df=read_csv('bancos.csv', cols)
-    if df.empty:
-        df=pd.DataFrame([
-            {'Clave':'BBVA','Nombre':'BBVA','Color':'#072146','Activo':True,'Orden':1,'IconColor':'bbva_color.png','IconWhite':'bbva_white.png','IconColorBase64':'','IconWhiteBase64':'','IconColorExt':'png','IconWhiteExt':'png'},
-            {'Clave':'Openbank','Nombre':'Openbank','Color':'#e40046','Activo':True,'Orden':2,'IconColor':'openbank_color.png','IconWhite':'openbank_white.png','IconColorBase64':'','IconWhiteBase64':'','IconColorExt':'png','IconWhiteExt':'png'},
-            {'Clave':'Cajamar','Nombre':'Cajamar','Color':'#008c95','Activo':True,'Orden':3,'IconColor':'cajamar_color.png','IconWhite':'cajamar_white.png','IconColorBase64':'','IconWhiteBase64':'','IconColorExt':'png','IconWhiteExt':'png'},
-            {'Clave':'Otros','Nombre':'Otros','Color':'#6b7280','Activo':True,'Orden':4,'IconColor':'','IconWhite':'','IconColorBase64':'','IconWhiteBase64':'','IconColorExt':'png','IconWhiteExt':'png'},
-        ]); save_csv('bancos.csv', df)
-    # Migración desde versiones antiguas sin iconos
-    defaults={
-        'BBVA':('bbva_color.png','bbva_white.png'),
-        'Openbank':('openbank_color.png','openbank_white.png'),
-        'Cajamar':('cajamar_color.png','cajamar_white.png'),
-        'Otros':('','')
-    }
+    defaults_rows=[
+        {'Clave':'BBVA','Nombre':'BBVA','Color':'#072146','Activo':True,'Orden':1,'IconColor':'bbva_color.png','IconWhite':'bbva_white.png','IconColorBase64':'','IconWhiteBase64':'','IconColorExt':'png','IconWhiteExt':'png'},
+        {'Clave':'Openbank','Nombre':'Openbank','Color':'#e40046','Activo':True,'Orden':2,'IconColor':'openbank_color.png','IconWhite':'openbank_white.png','IconColorBase64':'','IconWhiteBase64':'','IconColorExt':'png','IconWhiteExt':'png'},
+        {'Clave':'Cajamar','Nombre':'Cajamar','Color':'#008c95','Activo':True,'Orden':3,'IconColor':'cajamar_color.png','IconWhite':'cajamar_white.png','IconColorBase64':'','IconWhiteBase64':'','IconColorExt':'png','IconWhiteExt':'png'},
+        {'Clave':'Otros','Nombre':'Otros','Color':'#6b7280','Activo':True,'Orden':4,'IconColor':'','IconWhite':'','IconColorBase64':'','IconWhiteBase64':'','IconColorExt':'png','IconWhiteExt':'png'},
+    ]
+    defaults={r['Clave']:(r['IconColor'],r['IconWhite'],r['Color'],r['Orden'],r['Nombre']) for r in defaults_rows}
+
+    df=read_csv('bancos.csv')
+    if df is None or df.empty:
+        out=pd.DataFrame(defaults_rows, columns=cols)
+        save_csv('bancos.csv', out)
+        return out
+
+    # Acepta columnas antiguas/nuevas y elimina columnas totalmente sin nombre.
+    df=df.copy()
+    df.columns=[str(c).strip() for c in df.columns]
+    df=df[[c for c in df.columns if c and not c.lower().startswith('unnamed')]]
     for c in cols:
-        if c not in df: df[c]=''
-    df['Clave']=df['Clave'].astype(str).apply(safe_key)
-    df['Nombre']=df['Nombre'].fillna(df['Clave']).astype(str)
-    df['Color']=df['Color'].fillna('#6b7280').astype(str)
-    df['Activo']=df['Activo'].astype(str).str.lower().isin(['true','1','sí','si','yes'])
-    df['Orden']=pd.to_numeric(df['Orden'], errors='coerce').fillna(99).astype(int)
-    for i,r in df.iterrows():
-        key=str(r['Clave'])
-        if key in defaults:
-            if not str(r.get('IconColor') or '').strip() or str(r.get('IconColor')).lower() in ('nan','none'):
-                df.at[i,'IconColor']=defaults[key][0]
-            if not str(r.get('IconWhite') or '').strip() or str(r.get('IconWhite')).lower() in ('nan','none'):
-                df.at[i,'IconWhite']=defaults[key][1]
-        for c in ['IconColor','IconWhite','IconColorBase64','IconWhiteBase64','IconColorExt','IconWhiteExt']:
-            val=df.at[i,c]
-            df.at[i,c]='' if pd.isna(val) else str(val)
-    return df.drop_duplicates('Clave').sort_values('Orden')
+        if c not in df.columns:
+            df[c]=''
+
+    rows=[]
+    used=set()
+    for pos, raw in enumerate(df.to_dict('records'), start=1):
+        clave=safe_key(raw.get('Clave') or raw.get('Nombre') or '')
+        if not clave or clave.lower() in ('nan','none'):
+            continue
+        nombre=str(raw.get('Nombre') or clave).strip()
+        if not nombre or nombre.lower() in ('nan','none'):
+            nombre=clave
+        color=str(raw.get('Color') or '').strip()
+        if not color or color.lower() in ('nan','none') or not color.startswith('#'):
+            color=defaults.get(clave, ('','', '#6b7280', 99, clave))[2]
+        activo_raw=raw.get('Activo', True)
+        activo=str(activo_raw).strip().lower() in ['true','1','sí','si','yes','x','activo'] if activo_raw is not True else True
+        try:
+            orden=int(float(raw.get('Orden') if str(raw.get('Orden')).strip() not in ('','nan','None') else pos))
+        except Exception:
+            orden=defaults.get(clave, ('','', '#6b7280', pos, clave))[3] if clave in defaults else pos
+
+        icon_color=str(raw.get('IconColor') or '').strip()
+        icon_white=str(raw.get('IconWhite') or '').strip()
+        icon_color_b64=str(raw.get('IconColorBase64') or '').strip()
+        icon_white_b64=str(raw.get('IconWhiteBase64') or '').strip()
+        icon_color_ext=str(raw.get('IconColorExt') or 'png').strip().replace('.','') or 'png'
+        icon_white_ext=str(raw.get('IconWhiteExt') or 'png').strip().replace('.','') or 'png'
+        if clave in defaults:
+            if not icon_color or icon_color.lower() in ('nan','none'):
+                icon_color=defaults[clave][0]
+            if not icon_white or icon_white.lower() in ('nan','none'):
+                icon_white=defaults[clave][1]
+        # En bancos nuevos se permiten iconos vacíos.
+        if icon_color.lower() in ('nan','none'): icon_color=''
+        if icon_white.lower() in ('nan','none'): icon_white=''
+        if icon_color_b64.lower() in ('nan','none'): icon_color_b64=''
+        if icon_white_b64.lower() in ('nan','none'): icon_white_b64=''
+
+        rows.append({'Clave':clave,'Nombre':nombre,'Color':color,'Activo':activo,'Orden':orden,
+                     'IconColor':icon_color,'IconWhite':icon_white,
+                     'IconColorBase64':icon_color_b64,'IconWhiteBase64':icon_white_b64,
+                     'IconColorExt':icon_color_ext,'IconWhiteExt':icon_white_ext})
+        used.add(clave)
+
+    if not rows:
+        rows=defaults_rows
+    out=pd.DataFrame(rows, columns=cols).drop_duplicates('Clave', keep='last').sort_values(['Orden','Nombre'])
+
+    # Si la versión antigua de bancos.csv no tenía columnas de iconos, persistimos la migración.
+    try:
+        save_csv('bancos.csv', out)
+    except Exception:
+        pass
+    return out
 
 def _bank_row(k):
     df=load_banks(); r=df[df['Clave']==k]
