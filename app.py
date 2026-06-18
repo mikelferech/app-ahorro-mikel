@@ -22,7 +22,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.8.5"
+APP_VERSION = "0.8.6"
 APP_UPDATED = "18/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -979,8 +979,17 @@ def kpis(df):
 def render_patrimonio_chart(df, prefix="chart"):
     if df.empty: return
     df=df.sort_values('Fecha').copy(); df['Mes']=df['Fecha'].apply(month_label)
-    fig=go.Figure(go.Scatter(x=df['Mes'], y=df['Total'], mode='lines+markers'))
-    fig.update_layout(title='Patrimonio histórico', height=520, margin=dict(l=15,r=15,t=45,b=15))
+    fig=go.Figure(go.Scatter(
+        x=df['Mes'], y=df['Total'], mode='lines+markers',
+        line=dict(width=3, color='#60a5fa'),
+        marker=dict(size=6, color='#93c5fd', line=dict(width=1, color='#e0f2fe')),
+        fill='tozeroy', fillcolor='rgba(37,99,235,.24)',
+        hovertemplate='%{x}<br>%{y:,.2f} €<extra></extra>'
+    ))
+    fig.update_layout(
+        title='Patrimonio histórico', height=520, margin=dict(l=15,r=15,t=45,b=15),
+        paper_bgcolor='rgba(15,23,42,0)', plot_bgcolor='rgba(15,23,42,.08)'
+    )
     st.plotly_chart(fig, use_container_width=True, key=f"{prefix}_patrimonio")
 
 def render_diff_chart(df, prefix="chart"):
@@ -989,7 +998,10 @@ def render_diff_chart(df, prefix="chart"):
     mode = st.selectbox('Vista +/- mensual', ['Marcar gasto extraordinario', 'Zoom normal', 'Completa'], key=f'{prefix}_diff_mode')
     diffs = df['Diferencia'].astype(float)
     colors=['#16a34a' if v>=0 else '#dc2626' for v in diffs]
-    fig2=go.Figure(go.Bar(x=df['Mes'], y=diffs, marker_color=colors, customdata=diffs, hovertemplate='%{x}<br>%{customdata:,.2f} €<extra></extra>'))
+    fig2=go.Figure(go.Bar(
+        x=df['Mes'], y=diffs, marker_color=colors, marker_line=dict(color='rgba(255,255,255,.18)', width=.6),
+        opacity=.92, customdata=diffs, hovertemplate='%{x}<br>%{customdata:,.2f} €<extra></extra>'
+    ))
     title='+/- mensual'
     normal = diffs.copy()
     if len(normal) > 6:
@@ -1010,7 +1022,9 @@ def render_diff_chart(df, prefix="chart"):
         outliers=df[diffs < threshold]
         for _,r in outliers.iterrows():
             fig2.add_annotation(x=r['Mes'], y=0.04, yref='paper', text='⬇️ Gasto extraordinario', showarrow=False, font=dict(size=13, color='#fca5a5'), bgcolor='rgba(17,24,39,.65)', bordercolor='rgba(252,165,165,.5)', borderwidth=1)
-    fig2.update_layout(title=title, height=520, margin=dict(l=15,r=15,t=45,b=15))
+    fig2.add_hrect(y0=0, y1=max(float(diffs.max()) if len(diffs) else 0, 0), fillcolor='rgba(34,197,94,.07)', line_width=0, layer='below')
+    fig2.add_hrect(y0=min(float(diffs.min()) if len(diffs) else 0, 0), y1=0, fillcolor='rgba(239,68,68,.08)', line_width=0, layer='below')
+    fig2.update_layout(title=title, height=520, margin=dict(l=15,r=15,t=45,b=15), paper_bgcolor='rgba(15,23,42,0)', plot_bgcolor='rgba(15,23,42,.08)')
     st.plotly_chart(fig2, use_container_width=True, key=f"{prefix}_diferencia")
 
 def charts(df, prefix="chart"):
@@ -1067,7 +1081,7 @@ def render_bank_distribution(df):
         else:
             texts.append('')
     fig=go.Figure(go.Pie(labels=labels, values=values, hole=.58, marker=dict(colors=colors), text=texts, textinfo='text', hovertemplate='%{label}<br>%{value:,.2f} €<extra></extra>'))
-    fig.update_layout(title=f'Distribución por banco · {month_label(last["Fecha"])}', height=420, margin=dict(l=5,r=5,t=45,b=5), showlegend=True)
+    fig.update_layout(title=f'Distribución por banco · {month_label(last["Fecha"])}', height=420, margin=dict(l=5,r=5,t=45,b=5), showlegend=True, paper_bgcolor='rgba(15,23,42,0)', plot_bgcolor='rgba(15,23,42,.08)')
     if any((str(k).lower()=='otros' and v/total*100<3) for k,v in zip(keys,values)):
         fig.add_annotation(x=1.18, y=0.05, xref='paper', yref='paper', showarrow=False, align='left', font=dict(size=11, color='#9ca3af'), text='* Otros residual solo en leyenda')
     st.plotly_chart(fig, use_container_width=True, key='dashboard_distribution_bancos')
@@ -1153,32 +1167,48 @@ def render_ahorro_acumulado_anual(df):
         return
     d['Anio']=pd.to_datetime(d['Fecha'], errors='coerce').dt.year
     annual=d.groupby('Anio', as_index=False)['Diferencia'].sum().rename(columns={'Diferencia':'Ahorro anual'})
-    annual=annual.sort_values('Anio')
-    annual['Ahorro acumulado']=annual['Ahorro anual'].cumsum()
+    annual=annual.dropna(subset=['Anio']).sort_values('Anio')
     if annual.empty:
         return
-    st.markdown('### Ahorro acumulado por años')
+
+    st.markdown('### Ahorro anual por años')
     c1,c2=st.columns([.95,1.35])
+
     show=annual.copy()
     show['Año']=show['Anio'].astype(int)
-    show=show[['Año','Ahorro anual','Ahorro acumulado']]
+    show=show[['Año','Ahorro anual']]
     show_fmt=show.copy()
     show_fmt['Ahorro anual']=show_fmt['Ahorro anual'].apply(euro)
-    show_fmt['Ahorro acumulado']=show_fmt['Ahorro acumulado'].apply(euro)
+
     with c1:
         try:
             sty=pd.DataFrame('', index=show_fmt.index, columns=show_fmt.columns)
             sty['Ahorro anual']=['color:#22c55e;font-weight:900;' if money(v)>=0 else 'color:#ef4444;font-weight:900;' for v in show['Ahorro anual']]
-            sty['Ahorro acumulado']=['color:#22c55e;font-weight:900;' if money(v)>=0 else 'color:#ef4444;font-weight:900;' for v in show['Ahorro acumulado']]
             st.dataframe(show_fmt.style.apply(lambda _x: sty, axis=None), hide_index=True, use_container_width=True)
         except Exception:
             st.dataframe(show_fmt, hide_index=True, use_container_width=True)
+
     with c2:
-        fig=go.Figure()
-        fig.add_trace(go.Bar(x=annual['Anio'].astype(str), y=annual['Ahorro anual'], name='Ahorro anual', marker_color='#22c55e'))
-        fig.add_trace(go.Scatter(x=annual['Anio'].astype(str), y=annual['Ahorro acumulado'], name='Ahorro acumulado', mode='lines+markers', line=dict(width=3, color='#2563eb')))
-        fig.update_layout(height=360, margin=dict(l=15,r=15,t=35,b=15), legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1))
-        st.plotly_chart(fig, use_container_width=True, key='ahorro_acumulado_anual')
+        vals=annual['Ahorro anual'].astype(float)
+        colors=['#22c55e' if v>=0 else '#ef4444' for v in vals]
+        fig=go.Figure(go.Bar(
+            x=annual['Anio'].astype(int).astype(str), y=vals, name='Ahorro anual',
+            marker_color=colors, marker_line=dict(color='rgba(255,255,255,.20)', width=.7), opacity=.94,
+            text=[euro(v) for v in vals], textposition='outside',
+            hovertemplate='%{x}<br>%{y:,.2f} €<extra></extra>'
+        ))
+        ymax=max([0]+[float(v) for v in vals])
+        ymin=min([0]+[float(v) for v in vals])
+        fig.add_hrect(y0=0, y1=ymax, fillcolor='rgba(34,197,94,.08)', line_width=0, layer='below')
+        fig.add_hrect(y0=ymin, y1=0, fillcolor='rgba(239,68,68,.10)', line_width=0, layer='below')
+        fig.add_hline(y=0, line_color='rgba(255,255,255,.45)', line_width=1)
+        pad=max(500, (ymax-ymin)*.15 if ymax!=ymin else 500)
+        fig.update_yaxes(range=[ymin-pad, ymax+pad])
+        fig.update_layout(
+            title='Ahorro anual por año', height=380, margin=dict(l=15,r=15,t=45,b=15),
+            paper_bgcolor='rgba(15,23,42,0)', plot_bgcolor='rgba(15,23,42,.08)', showlegend=False
+        )
+        st.plotly_chart(fig, use_container_width=True, key='ahorro_anual_por_anio')
 
 def render_dashboard():
     st.header('📊 Dashboard')
