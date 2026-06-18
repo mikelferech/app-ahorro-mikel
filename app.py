@@ -22,7 +22,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.8.7"
+APP_VERSION = "0.8.8"
 APP_UPDATED = "18/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -1273,23 +1273,39 @@ def render_ahorro():
     table=df.sort_values('Fecha', ascending=False).copy(); table['Mes']=table['Fecha'].apply(month_label)
     show_cols=['Mes']+keys+['Total','Diferencia']
     raw_show=table[show_cols].rename(columns={k:bank_name(k) for k in keys})
-    # HTML propio para conservar siempre los colores de cada banco en la tabla de saldos.
-    # st.dataframe a veces ignora estilos de Styler en Streamlit Cloud, por eso aquí usamos tabla HTML.
-    headers=['Mes']+[bank_name(k) for k in keys]+['Total','Diferencia']
-    html_rows=[]
-    for _,r in table.iterrows():
-        cells=[f"<td class='month-cell'>{html.escape(month_label(r['Fecha']))}</td>"]
+
+    # Tabla Streamlit nativa: evita que HTML propio interfiera con el login/reruns.
+    # Colorea cada saldo con el color de su banco y ajusta negro/blanco para que se lea
+    # tanto en modo oscuro como si en el futuro se activa modo claro.
+    show_fmt=raw_show.copy()
+    for col in [bank_name(k) for k in keys]+['Total','Diferencia']:
+        if col in show_fmt.columns:
+            if col == 'Diferencia':
+                show_fmt[col]=raw_show[col].apply(lambda v: '—' if abs(money(v))<0.005 else euro(money(v)))
+            else:
+                show_fmt[col]=raw_show[col].apply(lambda v: euro(money(v)))
+
+    def _saldo_style(_df):
+        styles=pd.DataFrame('', index=show_fmt.index, columns=show_fmt.columns)
         for k in keys:
-            val=money(r.get(k,0))
-            color=bank_cell_text_color(k)
-            cells.append(f"<td class='bank-amount' style='color:{color}'>{euro(val)}</td>")
-        cells.append(f"<td class='total-cell'>{euro(money(r.get('Total',0)))}</td>")
-        dv=money(r.get('Diferencia',0))
-        dcls='diff-pos' if dv>0 else ('diff-neg' if dv<0 else 'diff-zero')
-        cells.append(f"<td class='{dcls}'>{'—' if abs(dv)<0.005 else euro(dv)}</td>")
-        html_rows.append('<tr>'+''.join(cells)+'</tr>')
-    th=''.join([f"<th>{html.escape(str(h))}</th>" for h in headers])
-    st.markdown(f"<div class='saldo-table-wrap'><table class='saldo-table'><thead><tr>{th}</tr></thead><tbody>{''.join(html_rows)}</tbody></table></div>", unsafe_allow_html=True)
+            col=bank_name(k)
+            if col in styles.columns:
+                styles[col]=f'color:{bank_cell_text_color(k)};font-weight:950;'
+        if 'Total' in styles.columns:
+            styles['Total']='color:#f8fafc;font-weight:900;'
+        if 'Diferencia' in styles.columns:
+            vals=raw_show['Diferencia'].apply(money)
+            styles['Diferencia']=[
+                'color:#22c55e;font-weight:950;' if v>0 else
+                ('color:#ef4444;font-weight:950;' if v<0 else 'color:#94a3b8;font-weight:850;')
+                for v in vals
+            ]
+        return styles
+
+    try:
+        st.dataframe(show_fmt.style.apply(_saldo_style, axis=None), hide_index=True, use_container_width=True)
+    except Exception:
+        st.dataframe(show_fmt, hide_index=True, use_container_width=True)
     with st.expander('✏️ Editar / borrar saldo', expanded=False):
         labels=table['Mes'].tolist()
         sel_label=st.selectbox('Selecciona mes', labels, key='edit_ah_sel')
