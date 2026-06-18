@@ -22,7 +22,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.8.4"
+APP_VERSION = "0.8.5"
 APP_UPDATED = "18/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -134,7 +134,7 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem
 .vadillo-box{background:#fff;border-radius:16px;padding:12px;border:1px solid rgba(128,128,128,.2);display:flex;align-items:center;justify-content:center;margin-bottom:1rem;}
 .vadillo-box img{max-height:78px;max-width:95%;object-fit:contain;}
 @media (prefers-color-scheme: dark){.vadillo-box{background:#111827}.vadillo-box img{filter: grayscale(1) brightness(0) invert(1);}}
-.payroll-table{width:100%;border-collapse:collapse;font-size:1.00rem;table-layout:fixed}.payroll-table th{background:#2F3B4F;color:#fff;padding:6px 6px;border-bottom:2px solid #00a2eb;text-align:right}.payroll-table th:first-child,.payroll-table td:first-child{text-align:left}.payroll-table td{padding:5px 6px;border:1px solid rgba(128,128,128,.22);text-align:right;font-variant-numeric:tabular-nums}.payroll-ok{background:rgba(16,185,129,.18)}.payroll-warn{background:rgba(245,158,11,.16)}.payroll-bad{background:rgba(220,38,38,.20)}.payroll-income{background:rgba(59,130,246,.18)!important;color:#dbeafe!important;font-weight:900}.compact-editor [data-testid="stDataFrame"]{font-size:.98rem!important}.irpf-table{width:100%;border-collapse:collapse;font-size:1.05rem}.irpf-table th{background:#2F3B4F;color:white;padding:9px;border-bottom:2px solid #c3005e}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
+.payroll-table{width:100%;border-collapse:collapse;font-size:1.00rem;table-layout:fixed}.payroll-table th{background:#2F3B4F;color:#fff;padding:6px 6px;border-bottom:2px solid #00a2eb;text-align:right}.payroll-table th:first-child,.payroll-table td:first-child{text-align:left}.payroll-table td{padding:5px 6px;border:1px solid rgba(128,128,128,.22);text-align:right;font-variant-numeric:tabular-nums}.payroll-ok{background:rgba(16,185,129,.18)}.payroll-warn{background:rgba(245,158,11,.16)}.payroll-bad{background:rgba(220,38,38,.20)}.payroll-income{background:rgba(59,130,246,.18)!important;color:#dbeafe!important;font-weight:900}.compact-editor [data-testid="stDataFrame"]{font-size:.98rem!important}.irpf-table{width:100%;border-collapse:collapse;font-size:1.05rem}.irpf-table th{background:#c3005e!important;color:white!important;padding:9px;border-bottom:2px solid #c3005e!important}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
 .interest-summary{padding:.48rem .65rem;border:1px solid rgba(128,128,128,.25);border-radius:10px;line-height:1.35;display:grid;grid-template-rows:auto auto;gap:.22rem;}
 .interest-summary .is-row{display:flex;align-items:center;justify-content:space-between;gap:.8rem;white-space:nowrap;}
 .interest-summary b{font-weight:900}.interest-summary span{font-weight:850;font-variant-numeric:tabular-nums;}
@@ -212,12 +212,14 @@ input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb=
 
 
 /* Ajustes v0.8.4 */
+.dashboard-tight{height:0!important;margin:-1.25rem 0 0 0!important;padding:0!important;}
+.element-container:has(.dashboard-tight){height:0!important;margin:0!important;padding:0!important;}
 .dashboard-tight + div {margin-top:0!important;}
 .account-grid{margin-top:.25rem!important;}
 .account-card{background-size:120% 120%;}
 .bank-chip{background-image:linear-gradient(135deg,rgba(255,255,255,.14),rgba(0,0,0,.16));}
-.irpf-table th{border-bottom:2px solid #c3005e!important;}
-.irpf-block-title{border-bottom:2px solid #c3005e!important;}
+.irpf-table th{background:#c3005e!important;border-bottom:2px solid #c3005e!important;}
+.irpf-block-title{background:#c3005e!important;border-bottom:2px solid #c3005e!important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -415,11 +417,40 @@ def read_csv(name, columns=None):
                 df[c] = None
         df = df[columns]
 
-    # Si hay CSV con datos, es la fuente principal.
+    # Si hay CSV con datos, normalmente es la fuente principal. Pero tras un redeploy
+    # Streamlit Cloud puede volver al CSV del repositorio y tapar cambios hechos desde la app
+    # (bancos nuevos, logo de empresa). Si el navegador tiene una copia más rica, la priorizamos
+    # y rehidratamos el CSV del servidor.
     if not df.empty:
-        memory_store()[name] = df.copy()
         if name in BROWSER_BACKUP_FILES:
+            try:
+                browser_df = read_browser_df(name, columns)
+                use_browser = False
+                if isinstance(browser_df, pd.DataFrame) and not browser_df.empty:
+                    if name == 'empresa_config.csv':
+                        csv_b64 = ''
+                        br_b64 = ''
+                        if 'LogoBase64' in df.columns:
+                            csv_b64 = str(df.iloc[0].get('LogoBase64') or '')
+                        if 'LogoBase64' in browser_df.columns:
+                            br_b64 = str(browser_df.iloc[0].get('LogoBase64') or '')
+                        use_browser = bool(br_b64 and br_b64.lower() not in ('nan','none') and (not csv_b64 or csv_b64.lower() in ('nan','none')))
+                    elif name == 'bancos.csv':
+                        use_browser = len(browser_df) > len(df)
+                    else:
+                        use_browser = len(browser_df) >= len(df) and len(browser_df) > 0
+                if use_browser:
+                    df = browser_df.copy()
+                    try:
+                        tmp = path(name + '.tmp')
+                        df.to_csv(tmp, index=False)
+                        tmp.replace(path(name))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
             write_browser_df(name, df)
+        memory_store()[name] = df.copy()
         return df.copy()
 
     # Si el CSV está vacío, probamos memoria del servidor.
@@ -1202,11 +1233,11 @@ def render_ahorro():
                 if str(bank_name(k)).strip().upper() == 'BBVA' or str(k).strip().upper() == 'BBVA':
                     style_df[col_name] = 'font-weight: 900;'
                 else:
-                    style_df[col_name] = f'color: {bank_cell_text_color(k)}; font-weight: 900;'
+                    style_df[col_name] = f'color: {bank_cell_text_color(k)} !important; font-weight: 900;'
         if 'Diferencia' in style_df.columns:
             diffs = raw_show['Diferencia'].apply(money).tolist()
             style_df['Diferencia'] = [
-                'color: #22c55e; font-weight: 900;' if v >= 0 else 'color: #ef4444; font-weight: 900;'
+                'color: #22c55e !important; font-weight: 900;' if v >= 0 else 'color: #ef4444 !important; font-weight: 900;'
                 for v in diffs
             ]
         st.dataframe(show.style.apply(lambda _x: style_df, axis=None), hide_index=True, use_container_width=True)
@@ -1225,6 +1256,9 @@ def render_ahorro():
             base=df[df['Fecha']!=row['Fecha']].copy(); save_ahorro(pd.concat([base,pd.DataFrame([new])], ignore_index=True)); st.success('Actualizado'); st.rerun()
         if c2.button('❌ Borrar mes', use_container_width=True):
             save_ahorro(df[df['Fecha']!=row['Fecha']].copy()); st.success('Borrado'); st.rerun()
+
+    st.divider()
+    render_ahorro_acumulado_anual(df)
 
 
 def load_empresa_config():
