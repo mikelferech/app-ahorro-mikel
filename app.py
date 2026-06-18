@@ -22,7 +22,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.8.6"
+APP_VERSION = "0.8.7"
 APP_UPDATED = "18/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -114,6 +114,20 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem
 .month-card .m{opacity:.9;font-size:1rem}.month-card .v{font-size:1.15rem;margin-top:.18rem}.month-pos{background:rgba(22,163,74,.26);color:#86efac}.month-neg{background:rgba(220,38,38,.24);color:#fecaca}.month-zero{background:rgba(107,114,128,.22);color:#e5e7eb}
 .backup-card{border:1px solid rgba(128,128,128,.25);border-radius:16px;padding:1rem;background:rgba(47,59,79,.13);margin:.8rem 0;}
 .bank-name-cell{font-weight:900;display:inline-flex;align-items:center;gap:.35rem;}
+
+.saldo-table-wrap{width:100%;overflow-x:auto;border:1px solid rgba(0,162,235,.85);border-radius:10px;margin-top:.35rem;}
+.saldo-table{width:100%;border-collapse:collapse;font-size:1.00rem;min-width:760px;}
+.saldo-table th{background:#1f2530!important;color:#cbd5e1!important;text-align:left;padding:9px 10px;border-bottom:1px solid rgba(148,163,184,.25);font-weight:850;}
+.saldo-table td{padding:8px 10px;border-bottom:1px solid rgba(148,163,184,.15);border-right:1px solid rgba(148,163,184,.14);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.saldo-table tr:last-child td{border-bottom:none;}
+.saldo-table .month-cell{color:#f8fafc;font-weight:800;}
+.saldo-table .bank-amount{font-weight:950;}
+.saldo-table .total-cell{color:#f8fafc;font-weight:900;}
+.saldo-table .diff-pos{color:#22c55e;font-weight:950;}
+.saldo-table .diff-neg{color:#ef4444;font-weight:950;}
+.saldo-table .diff-zero{color:#94a3b8;font-weight:850;}
+@media (max-width: 760px){.saldo-table{font-size:.92rem;min-width:680px}.saldo-table th,.saldo-table td{padding:7px 8px}}
+
 
 .row-card{border-bottom:1px solid rgba(128,128,128,.15);padding:.35rem 0;}
 .footer{margin-top:2rem;border-top:1px solid rgba(128,128,128,.22);padding:1rem 0 .2rem;display:flex;align-items:center;justify-content:center;gap:14px;opacity:.8;font-size:.86rem;}
@@ -313,9 +327,17 @@ def bank_text_color(k):
     return '#FFFFFF' if is_dark_color(color) else color
 
 def bank_cell_text_color(k):
-    # Para tablas en modo oscuro: si el color corporativo es muy oscuro, usar blanco.
+    # Para tablas en modo oscuro: mantener el color corporativo, pero hacerlo legible.
+    # Negro/Revolut -> blanco; colores muy oscuros -> versión aclarada del color; blanco -> blanco.
     color=bank_color(k)
-    return '#FFFFFF' if is_dark_color(color) else color
+    rgb=hex_to_rgb(color)
+    if rgb == (0,0,0) or color.lower() in ['#000', '#000000']:
+        return '#FFFFFF'
+    if color.lower() in ['#fff', '#ffffff']:
+        return '#FFFFFF'
+    if is_dark_color(color):
+        return lighten_hex(color, .55)
+    return color
 
 def rerun(): st.rerun()
 
@@ -1251,28 +1273,23 @@ def render_ahorro():
     table=df.sort_values('Fecha', ascending=False).copy(); table['Mes']=table['Fecha'].apply(month_label)
     show_cols=['Mes']+keys+['Total','Diferencia']
     raw_show=table[show_cols].rename(columns={k:bank_name(k) for k in keys})
-    show=raw_show.copy()
-    for c in show.columns:
-        if c!='Mes': show[c]=show[c].apply(euro)
-    try:
-        style_df = pd.DataFrame('', index=show.index, columns=show.columns)
+    # HTML propio para conservar siempre los colores de cada banco en la tabla de saldos.
+    # st.dataframe a veces ignora estilos de Styler en Streamlit Cloud, por eso aquí usamos tabla HTML.
+    headers=['Mes']+[bank_name(k) for k in keys]+['Total','Diferencia']
+    html_rows=[]
+    for _,r in table.iterrows():
+        cells=[f"<td class='month-cell'>{html.escape(month_label(r['Fecha']))}</td>"]
         for k in keys:
-            col_name = bank_name(k)
-            if col_name in style_df.columns:
-                # BBVA en azul oscuro no se lee bien en modo oscuro; lo dejamos con color del tema.
-                if str(bank_name(k)).strip().upper() == 'BBVA' or str(k).strip().upper() == 'BBVA':
-                    style_df[col_name] = 'font-weight: 900;'
-                else:
-                    style_df[col_name] = f'color: {bank_cell_text_color(k)} !important; font-weight: 900;'
-        if 'Diferencia' in style_df.columns:
-            diffs = raw_show['Diferencia'].apply(money).tolist()
-            style_df['Diferencia'] = [
-                'color: #22c55e !important; font-weight: 900;' if v >= 0 else 'color: #ef4444 !important; font-weight: 900;'
-                for v in diffs
-            ]
-        st.dataframe(show.style.apply(lambda _x: style_df, axis=None), hide_index=True, use_container_width=True)
-    except Exception:
-        st.dataframe(show, hide_index=True, use_container_width=True)
+            val=money(r.get(k,0))
+            color=bank_cell_text_color(k)
+            cells.append(f"<td class='bank-amount' style='color:{color}'>{euro(val)}</td>")
+        cells.append(f"<td class='total-cell'>{euro(money(r.get('Total',0)))}</td>")
+        dv=money(r.get('Diferencia',0))
+        dcls='diff-pos' if dv>0 else ('diff-neg' if dv<0 else 'diff-zero')
+        cells.append(f"<td class='{dcls}'>{'—' if abs(dv)<0.005 else euro(dv)}</td>")
+        html_rows.append('<tr>'+''.join(cells)+'</tr>')
+    th=''.join([f"<th>{html.escape(str(h))}</th>" for h in headers])
+    st.markdown(f"<div class='saldo-table-wrap'><table class='saldo-table'><thead><tr>{th}</tr></thead><tbody>{''.join(html_rows)}</tbody></table></div>", unsafe_allow_html=True)
     with st.expander('✏️ Editar / borrar saldo', expanded=False):
         labels=table['Mes'].tolist()
         sel_label=st.selectbox('Selecciona mes', labels, key='edit_ah_sel')
