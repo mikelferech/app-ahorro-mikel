@@ -22,7 +22,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.8.8"
+APP_VERSION = "0.8.9"
 APP_UPDATED = "18/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -226,9 +226,16 @@ input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb=
 
 
 /* Ajustes v0.8.4 */
-.dashboard-tight{height:0!important;margin:-1.25rem 0 0 0!important;padding:0!important;}
-.element-container:has(.dashboard-tight){height:0!important;margin:0!important;padding:0!important;}
-.dashboard-tight + div {margin-top:0!important;}
+
+/* Ajuste específico Dashboard: elimina huecos fantasma entre título y KPIs */
+.dash-title{display:flex;align-items:center;gap:.55rem;margin:.10rem 0 .35rem 0!important;padding:0!important;font-size:2.05rem;font-weight:950;line-height:1.15;}
+.dash-title .dash-ico{font-size:1.65rem;line-height:1;}
+.dashboard-tight{height:0!important;min-height:0!important;margin:0!important;padding:0!important;line-height:0!important;overflow:hidden!important;}
+.element-container:has(.dashboard-tight){height:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important;}
+.element-container:has(.dash-title){margin-bottom:0!important;padding-bottom:0!important;}
+.element-container:has(.dash-title) + .element-container{margin-top:0!important;padding-top:0!important;}
+.stTabs [data-testid="stVerticalBlock"]{gap:.35rem!important;}
+
 .account-grid{margin-top:.25rem!important;}
 .account-card{background-size:120% 120%;}
 .bank-chip{background-image:linear-gradient(135deg,rgba(255,255,255,.14),rgba(0,0,0,.16));}
@@ -1233,8 +1240,8 @@ def render_ahorro_acumulado_anual(df):
         st.plotly_chart(fig, use_container_width=True, key='ahorro_anual_por_anio')
 
 def render_dashboard():
-    st.header('📊 Dashboard')
-    st.markdown("<div class='dashboard-tight'></div>", unsafe_allow_html=True)
+    # Título HTML propio para evitar el hueco fantasma que genera a veces st.header dentro de tabs.
+    st.markdown("<div class='dash-title'><span class='dash-ico'>📊</span><span>Dashboard</span></div><div class='dashboard-tight'></div>", unsafe_allow_html=True)
     df=load_ahorro()
     kpis(df)
     render_account_cards(df)
