@@ -22,7 +22,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.8.14"
+APP_VERSION = "0.8.15"
 APP_UPDATED = "18/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -216,31 +216,8 @@ input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb=
 .irpf-table th{background:#c3005e!important;border-bottom:2px solid #c3005e!important;}
 .irpf-block-title{background:#c3005e!important;border-bottom:2px solid #c3005e!important;}
 
-/* v0.8.12: eliminar huecos fantasma generados por contenedores vacíos de Streamlit tabs */
-div[data-testid="stTabs"] div[data-baseweb="tab-panel"]{
-  padding-top:0!important;
-  margin-top:0!important;
-}
-div[data-testid="stTabs"] div[data-baseweb="tab-panel"] > div:first-child{
-  padding-top:0!important;
-  margin-top:0!important;
-}
-div[data-testid="stTabs"] div[data-testid="stVerticalBlock"]{
-  padding-top:0!important;
-  margin-top:0!important;
-}
-div[data-testid="stTabs"] div[data-testid="stVerticalBlock"] > div:empty{
-  display:none!important;
-  height:0!important;
-  min-height:0!important;
-  margin:0!important;
-  padding:0!important;
-  overflow:hidden!important;
-}
-/* Recupera un margen equilibrado entre la barra de pestañas y el primer bloque real */
-div[data-testid="stTabs"] div[data-baseweb="tab-panel"] .account-grid:first-of-type{
-  margin-top:.9rem!important;
-}
+/* v0.8.15: hueco Dashboard corregido eliminando iframes de localStorage; sin CSS agresivo sobre pestañas. */
+
 
 </style>
 """, unsafe_allow_html=True)
@@ -396,30 +373,17 @@ def _browser_key(name):
     return "ahorro_mikel_" + name.replace(".", "_")
 
 def read_browser_df(name, columns=None):
-    """Lee copia del navegador (localStorage). Esto sí sobrevive a F5/redeploys en el mismo móvil/PC."""
-    if streamlit_js_eval is None:
-        return pd.DataFrame(columns=columns or [])
-    try:
-        key = _browser_key(name)
-        payload = streamlit_js_eval(
-            js_expressions=f"localStorage.getItem({json.dumps(key)})",
-            key=f"get_{key}"
-        )
-        return _df_from_json_payload(payload, columns)
-    except Exception:
-        return pd.DataFrame(columns=columns or [])
+    """v0.8.15: desactivado localStorage en caliente.
+
+    El componente streamlit_js_eval crea iframes invisibles dentro del panel de pestañas.
+    Esos iframes eran los bloques vacíos que generaban el hueco grande del Dashboard.
+    Para mantener el layout estable, la lectura desde navegador queda desactivada en la carga normal.
+    """
+    return pd.DataFrame(columns=columns or [])
 
 def write_browser_df(name, df):
-    """Guarda copia en localStorage. La app sigue escribiendo CSV para exportar, pero localStorage evita pérdidas al recargar."""
-    if streamlit_js_eval is None:
-        return
-    try:
-        key = _browser_key(name)
-        payload = _df_to_json_payload(df)
-        js = f"localStorage.setItem({json.dumps(key)}, {json.dumps(payload)})"
-        streamlit_js_eval(js_expressions=js, key=f"set_{key}_{abs(hash(payload))}", want_output=False)
-    except Exception:
-        pass
+    """v0.8.15: desactivado guardado automático en localStorage para evitar iframes fantasma."""
+    return
 
 # ---------- csv storage ----------
 def path(name): DATA.mkdir(exist_ok=True); return DATA/name
