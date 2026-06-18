@@ -22,7 +22,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.8.11"
+APP_VERSION = "0.8.12"
 APP_UPDATED = "18/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -62,6 +62,36 @@ components.html("""
   upsert('meta', {name:'theme-color', content:'#00a2eb'});
   upsert('meta', {name:'apple-mobile-web-app-title', content:'Ahorro Mikel'});
   upsert('meta', {name:'application-name', content:'Ahorro Mikel'});
+  function collapseDashboardGap(){
+    try{
+      const panels = d.querySelectorAll('div[data-baseweb="tab-panel"]');
+      panels.forEach(panel => {
+        panel.style.paddingTop = '0px';
+        panel.style.marginTop = '0px';
+        const blocks = panel.querySelectorAll('div[data-testid="stVerticalBlock"]');
+        blocks.forEach(block => {
+          block.style.marginTop = '0px';
+          block.style.paddingTop = '0px';
+          Array.from(block.children).forEach((ch, idx) => {
+            const txt = (ch.innerText || '').trim();
+            const hasReal = ch.querySelector('canvas,svg,img,input,button,select,textarea,iframe,[data-testid="stDataFrame"],[data-testid="stPlotlyChart"],table,.account-grid,.metric-card,.account-total');
+            const rect = ch.getBoundingClientRect();
+            if(!txt && !hasReal && rect.height > 24){
+              ch.style.display='none';
+              ch.style.height='0px';
+              ch.style.minHeight='0px';
+              ch.style.margin='0px';
+              ch.style.padding='0px';
+              ch.style.overflow='hidden';
+            }
+          });
+        });
+      });
+    }catch(e){}
+  }
+  collapseDashboardGap();
+  let n=0;
+  const timer=setInterval(function(){ collapseDashboardGap(); if(++n>30) clearInterval(timer); }, 250);
 })();
 </script>
 """, height=0, width=0)
@@ -237,6 +267,33 @@ input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb=
 .bank-chip{background-image:linear-gradient(135deg,rgba(255,255,255,.14),rgba(0,0,0,.16));}
 .irpf-table th{background:#c3005e!important;border-bottom:2px solid #c3005e!important;}
 .irpf-block-title{background:#c3005e!important;border-bottom:2px solid #c3005e!important;}
+
+/* v0.8.12: eliminar huecos fantasma generados por contenedores vacíos de Streamlit tabs */
+div[data-testid="stTabs"] div[data-baseweb="tab-panel"]{
+  padding-top:0!important;
+  margin-top:0!important;
+}
+div[data-testid="stTabs"] div[data-baseweb="tab-panel"] > div:first-child{
+  padding-top:0!important;
+  margin-top:0!important;
+}
+div[data-testid="stTabs"] div[data-testid="stVerticalBlock"]{
+  padding-top:0!important;
+  margin-top:0!important;
+}
+div[data-testid="stTabs"] div[data-testid="stVerticalBlock"] > div:empty{
+  display:none!important;
+  height:0!important;
+  min-height:0!important;
+  margin:0!important;
+  padding:0!important;
+  overflow:hidden!important;
+}
+/* Recupera un margen equilibrado entre la barra de pestañas y el primer bloque real */
+div[data-testid="stTabs"] div[data-baseweb="tab-panel"] .account-grid:first-of-type{
+  margin-top:.9rem!important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
