@@ -42,33 +42,12 @@ def get_page_icon():
 
 st.set_page_config(page_title=APP_TITLE, page_icon=get_page_icon(), layout="wide", initial_sidebar_state="collapsed")
 
-# Intenta forzar nombre, favicon y manifiesto PWA en navegadores compatibles.
-# En Streamlit Cloud no siempre se respeta al 100%, pero ayuda en Chrome/Android.
-components.html("""
-<script>
-(function(){
-  const d = window.parent.document;
-  d.title = 'Ahorro Mikel';
-  function upsert(tag, attrs){
-    let q = tag;
-    if(attrs.rel) q += '[rel="'+attrs.rel+'"]';
-    let el = d.querySelector(q);
-    if(!el){ el = d.createElement(tag); d.head.appendChild(el); }
-    Object.entries(attrs).forEach(([k,v]) => el.setAttribute(k,v));
-  }
-  upsert('link', {rel:'icon', href:'mfe_favicon.png?v=083', type:'image/png'});
-  upsert('link', {rel:'apple-touch-icon', href:'mfe_icon_192.png?v=083'});
-  upsert('link', {rel:'manifest', href:'manifest.json?v=083'});
-  upsert('meta', {name:'theme-color', content:'#00a2eb'});
-  upsert('meta', {name:'apple-mobile-web-app-title', content:'Ahorro Mikel'});
-  upsert('meta', {name:'application-name', content:'Ahorro Mikel'});
-})();
-</script>
-""", height=0, width=0)
+# PWA: nombre/favicon gestionados con st.set_page_config y archivos estáticos.
+# Evitamos components.html aquí porque en Streamlit puede reservar un contenedor vacío arriba.
 
 st.markdown("""
 <style>
-.main .block-container {padding-top: .55rem; max-width: 1780px; font-size: 1.05rem;}
+.main .block-container {padding-top: .05rem!important; max-width: 1780px; font-size: 1.05rem;}
 html, body, .stApp {font-size:16px!important;}
 label, input, textarea, button, [data-testid="stWidgetLabel"] {font-size:1.00rem!important;}
 h1 {font-size: 2.65rem !important;}
@@ -241,6 +220,17 @@ input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb=
 .bank-chip{background-image:linear-gradient(135deg,rgba(255,255,255,.14),rgba(0,0,0,.16));}
 .irpf-table th{background:#c3005e!important;border-bottom:2px solid #c3005e!important;}
 .irpf-block-title{background:#c3005e!important;border-bottom:2px solid #c3005e!important;}
+
+
+/* v0.8.10: compactar cabecera y Dashboard */
+[data-testid="stAppViewContainer"] > .main .block-container{padding-top:.05rem!important;}
+.header-row{margin-top:0!important;margin-bottom:.05rem!important;padding-top:0!important;}
+.stTabs [data-baseweb="tab-list"]{margin-top:0!important;margin-bottom:0!important;}
+.stTabs [data-testid="stVerticalBlock"]{gap:.15rem!important;}
+.stTabs [role="tabpanel"]{padding-top:.25rem!important;}
+.element-container:empty{display:none!important;height:0!important;margin:0!important;padding:0!important;}
+.account-grid:first-child{margin-top:0!important;}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -1240,8 +1230,7 @@ def render_ahorro_acumulado_anual(df):
         st.plotly_chart(fig, use_container_width=True, key='ahorro_anual_por_anio')
 
 def render_dashboard():
-    # Título HTML propio para evitar el hueco fantasma que genera a veces st.header dentro de tabs.
-    st.markdown("<div class='dash-title'><span class='dash-ico'>📊</span><span>Dashboard</span></div><div class='dashboard-tight'></div>", unsafe_allow_html=True)
+    # Sin título interno: la pestaña activa ya indica Dashboard y así evitamos huecos fantasma.
     df=load_ahorro()
     kpis(df)
     render_account_cards(df)
