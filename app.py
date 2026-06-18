@@ -22,8 +22,8 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.8.2"
-APP_UPDATED = "14/06/2026"
+APP_VERSION = "0.8.3"
+APP_UPDATED = "18/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
 MFE_LOGO = Path("mfe_cabecera.png")
@@ -56,9 +56,9 @@ components.html("""
     if(!el){ el = d.createElement(tag); d.head.appendChild(el); }
     Object.entries(attrs).forEach(([k,v]) => el.setAttribute(k,v));
   }
-  upsert('link', {rel:'icon', href:'mfe_favicon.png?v=081', type:'image/png'});
-  upsert('link', {rel:'apple-touch-icon', href:'mfe_icon_192.png?v=081'});
-  upsert('link', {rel:'manifest', href:'manifest.json?v=081'});
+  upsert('link', {rel:'icon', href:'mfe_favicon.png?v=083', type:'image/png'});
+  upsert('link', {rel:'apple-touch-icon', href:'mfe_icon_192.png?v=083'});
+  upsert('link', {rel:'manifest', href:'manifest.json?v=083'});
   upsert('meta', {name:'theme-color', content:'#00a2eb'});
   upsert('meta', {name:'apple-mobile-web-app-title', content:'Ahorro Mikel'});
   upsert('meta', {name:'application-name', content:'Ahorro Mikel'});
@@ -185,6 +185,31 @@ input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb=
 [data-baseweb="tab"]:hover, [data-baseweb="tab"][aria-selected="true"] {color:#00a2eb!important;}
 .st-emotion-cache-10trblm, .st-emotion-cache-16idsys p {caret-color:#00a2eb!important;}
 
+/* Modernización visual v0.8.3 */
+:root{--mfe-blue:#00a2eb;--mfe-purple:#8b5cf6;--mfe-green:#22c55e;--mfe-red:#ef4444;}
+.stButton > button, .stDownloadButton > button{border-radius:12px!important;font-weight:900!important;}
+.modern-pill{display:inline-flex;align-items:center;gap:.35rem;padding:.22rem .62rem;border-radius:999px;background:rgba(0,162,235,.16);color:#7dd3fc;font-weight:900;font-size:.82rem;margin-top:.45rem;}
+.metric-card{border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:1.0rem 1.15rem;background:linear-gradient(135deg,rgba(0,162,235,.20),rgba(15,23,42,.55));box-shadow:0 10px 28px rgba(0,0,0,.20);min-height:132px;}
+.metric-card .mc-title{font-weight:850;opacity:.95;font-size:1.00rem;display:flex;align-items:center;gap:.5rem;}
+.metric-card .mc-value{font-size:1.75rem;line-height:1.10;font-weight:950;margin-top:.6rem;}
+.metric-card .mc-sub{margin-top:.45rem;opacity:.78;font-weight:750;font-size:.88rem;}
+.metric-card.bad{background:linear-gradient(135deg,rgba(127,29,29,.40),rgba(15,23,42,.58));}
+.metric-card.good{background:linear-gradient(135deg,rgba(20,83,45,.42),rgba(15,23,42,.58));}
+.metric-card.purple{background:linear-gradient(135deg,rgba(88,28,135,.42),rgba(15,23,42,.58));}
+.account-card{background-image:linear-gradient(135deg,rgba(255,255,255,.08),rgba(0,0,0,.18));}
+.account-card .account-chip{display:inline-block;border-radius:999px;padding:.20rem .55rem;background:rgba(255,255,255,.15);font-size:.78rem;font-weight:900;margin-top:.45rem;}
+.account-total{background:linear-gradient(135deg,rgba(15,23,42,.88),rgba(0,162,235,.12))!important;box-shadow:0 8px 26px rgba(0,0,0,.18);}
+.bank-chip{box-shadow:0 8px 22px rgba(0,0,0,.18);}
+.irpf-table td,.irpf-table th{white-space:nowrap;}
+@media (max-width: 760px){
+  .metric-card{min-height:110px;margin-bottom:.65rem;}
+  .metric-card .mc-value{font-size:1.55rem;}
+  .irpf-table{font-size:.92rem!important;}
+  .irpf-table td,.irpf-table th{padding:5px 6px!important;white-space:nowrap;}
+  .bank-name-cell{gap:.25rem;}
+  .bank-icon{height:1.0em!important;width:1.0em!important;}
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -239,6 +264,27 @@ def month_options(start=2012, end=None):
 
 def safe_key(s):
     return re.sub(r'[^A-Za-z0-9]+','_',str(s).strip()).strip('_') or 'Banco'
+
+
+def hex_to_rgb(h):
+    h=str(h or '').strip().lstrip('#')
+    if len(h)==3:
+        h=''.join(ch*2 for ch in h)
+    try:
+        return tuple(int(h[i:i+2],16) for i in (0,2,4))
+    except Exception:
+        return (107,114,128)
+
+def is_dark_color(h):
+    r,g,b=hex_to_rgb(h)
+    return (0.299*r + 0.587*g + 0.114*b) < 140
+
+def readable_text_color(bg):
+    return '#FFFFFF' if is_dark_color(bg) else '#111827'
+
+def bank_text_color(k):
+    color=bank_color(k)
+    return '#FFFFFF' if is_dark_color(color) else color
 
 def rerun(): st.rerun()
 
@@ -852,12 +898,23 @@ def kpis(df):
     valid=df[df['Total']>0].sort_values('Fecha') if not df.empty else pd.DataFrame()
     if valid.empty:
         st.warning('Aún no hay datos válidos de ahorro.'); return
-    last=valid.iloc[-1]; diff=last['Diferencia']; keys=bank_keys(True)
-    cols=st.columns(4)
-    cols[0].metric(f'Total actual · {month_label(last.Fecha)}', euro(last.Total))
-    cols[1].metric('Último +/-', euro(diff), delta=euro(diff))
-    if keys: cols[2].metric(bank_name(keys[0]), euro(last.get(keys[0],0)))
-    if len(keys)>1: cols[3].metric(' + '.join(bank_name(k) for k in keys[1:3]), euro(sum(money(last.get(k,0)) for k in keys[1:3])))
+    last=valid.iloc[-1]
+    diff=money(last.get('Diferencia',0))
+    bbva_key='BBVA' if 'BBVA' in bank_keys(False) else (bank_keys(True)[0] if bank_keys(True) else '')
+    bbva_val=money(last.get(bbva_key,0)) if bbva_key else 0
+    otras=money(last.get('Total',0))-bbva_val
+    diff_cls='good' if diff>=0 else 'bad'
+    diff_icon='📈' if diff>=0 else '📉'
+    bbva_icon=bank_icon_html(bbva_key, white=True, size=26) if bbva_key else '🏦'
+    html_k=f"""
+    <div class='account-grid'>
+      <div class='metric-card'><div class='mc-title'>📅 Total actual · {month_label(last.Fecha)}</div><div class='mc-value'>{euro(last.Total)}</div><span class='modern-pill'>Saldo actual</span></div>
+      <div class='metric-card {diff_cls}'><div class='mc-title'>{diff_icon} Último +/-</div><div class='mc-value'>{euro(diff)}</div><span class='modern-pill'>{'Subida' if diff>=0 else 'Bajada'}</span></div>
+      <div class='metric-card'><div class='mc-title'>{bbva_icon} BBVA</div><div class='mc-value'>{euro(bbva_val)}</div><span class='modern-pill'>Cuenta principal</span></div>
+      <div class='metric-card purple'><div class='mc-title'>💠 Otras cuentas</div><div class='mc-value'>{euro(otras)}</div><div class='mc-sub'>Todos los bancos excepto BBVA</div></div>
+    </div>
+    """
+    st.markdown(html_k, unsafe_allow_html=True)
 
 def render_patrimonio_chart(df, prefix="chart"):
     if df.empty: return
@@ -914,17 +971,15 @@ def render_account_cards(df):
     last=latest_valid_ahorro(df)
     if last is None: return
     keys=bank_keys(True)
-    st.markdown(f"<div class='account-total'><b>💳 Último mes registrado · {month_label(last['Fecha'])}</b><br><span style='font-size:1.45rem;font-weight:950'>Total: {euro(last['Total'])}</span></div>", unsafe_allow_html=True)
-    # Respeta el orden definido en Configuración de bancos.
-    cards=[]
+    st.markdown(f"<div class='account-total'><b>💳 Último mes registrado · {month_label(last['Fecha'])}</b><br><span style='font-size:1.45rem;font-weight:950'>Total: {euro(last['Total'])}</span><div class='modern-pill'>Saldo actual</div></div>", unsafe_allow_html=True)
+    html_cards="<div class='account-grid'>"
     for k in keys:
         val=money(last.get(k,0))
-        cards.append((k,val))
-    html_cards="<div class='account-grid'>"
-    for k,val in cards:
-        icon=bank_icon_html(k, white=True, size=24)
+        bg=bank_color(k)
+        txt=readable_text_color(bg)
+        icon=bank_icon_html(k, white=True if is_dark_color(bg) else False, size=24)
         name=html.escape(bank_name(k))
-        html_cards += f"<div class='account-card' style='background:{bank_color(k)}'><div class='bank'>{icon}{name} · {month_label(last['Fecha'])}</div><div class='amount'>{euro(val)}</div></div>"
+        html_cards += f"<div class='account-card' style='background:{bg};color:{txt}'><div class='bank'>{icon}{name} · {month_label(last['Fecha'])}</div><div class='amount'>{euro(val)}</div><span class='account-chip'>Saldo actual</span></div>"
     html_cards += "</div>"
     st.markdown(html_cards, unsafe_allow_html=True)
     prev=df[df['Fecha'] < last['Fecha']].sort_values('Fecha')
@@ -944,12 +999,17 @@ def render_bank_distribution(df):
     values=[money(last.get(k,0)) for k in keys]
     total=sum(values) or 1
     colors=[bank_color(k) for k in keys]
-    # Oculta etiquetas muy pequeñas en el donut, pero mantiene el banco en la leyenda.
-    texts=[f"{lab}<br>{val/total*100:.1f}%" if (val/total*100)>=3 else '' for lab,val in zip(labels,values)]
+    texts=[]
+    for k,lab,val in zip(keys,labels,values):
+        pctv=val/total*100
+        if str(k).upper()=='BBVA' or str(k).lower()!='otros' or pctv>=3:
+            texts.append(f"{lab}<br>{pctv:.1f}%")
+        else:
+            texts.append('')
     fig=go.Figure(go.Pie(labels=labels, values=values, hole=.58, marker=dict(colors=colors), text=texts, textinfo='text', hovertemplate='%{label}<br>%{value:,.2f} €<extra></extra>'))
     fig.update_layout(title=f'Distribución por banco · {month_label(last["Fecha"])}', height=420, margin=dict(l=5,r=5,t=45,b=5), showlegend=True)
-    if any((v/total*100)<3 for v in values):
-        fig.add_annotation(x=1.18, y=0.05, xref='paper', yref='paper', showarrow=False, align='left', font=dict(size=11, color='#9ca3af'), text='* Etiquetas <3% solo en leyenda')
+    if any((str(k).lower()=='otros' and v/total*100<3) for k,v in zip(keys,values)):
+        fig.add_annotation(x=1.18, y=0.05, xref='paper', yref='paper', showarrow=False, align='left', font=dict(size=11, color='#9ca3af'), text='* Otros residual solo en leyenda')
     st.plotly_chart(fig, use_container_width=True, key='dashboard_distribution_bancos')
 
 def _monthly_current_year(df):
@@ -1031,7 +1091,7 @@ def render_dashboard():
     kpis(df)
     render_account_cards(df)
     # Dos primeros gráficos más anchos; donut más estrecho.
-    c1,c2,c3=st.columns([1.25,1.25,.82])
+    c1,c2,c3=st.columns([1.35,1.35,.78])
     with c1:
         render_patrimonio_chart(df, "dashboard")
     with c2:
@@ -1546,7 +1606,9 @@ def render_intereses():
         html_tbl="<table class='irpf-table'><tr><th>Mes</th><th>Banco</th><th>Interés bruto</th><th>Retención 19%</th><th>Neto esperado</th><th>Ingresado</th><th>Diferencia</th></tr>"
         for _,r in ydf.iterrows():
             k=str(r.get('Banco',''))
-            bcell=f"<span class='bank-name-cell' style='color:{bank_color(k)}'>{bank_icon_html(k, white=False, size=20)}{html.escape(bank_name(k))}</span>"
+            btxt=bank_text_color(k)
+            bicon_white=True if is_dark_color(bank_color(k)) else False
+            bcell=f"<span class='bank-name-cell' style='color:{btxt}'>{bank_icon_html(k, white=bicon_white, size=20)}{html.escape(bank_name(k))}</span>"
             diff=money(r.get('Diferencia',0)); dcol='#22c55e' if diff>=0 else '#ef4444'
             html_tbl += f"<tr><td>{html.escape(str(r.get('Mes','')))}</td><td>{bcell}</td><td class='irpf-num'>{euro(r.get('InteresBruto',0))}</td><td class='irpf-num'>{euro(r.get('Retencion',0))}</td><td class='irpf-num'>{euro(r.get('NetoEsperado',0))}</td><td class='irpf-num'>{euro(r.get('Ingresado',0))}</td><td class='irpf-num' style='color:{dcol};font-weight:900'>{euro(diff)}</td></tr>"
         html_tbl += "</table>"
@@ -1636,7 +1698,7 @@ def render_irpf():
     st.markdown(html+mobile, unsafe_allow_html=True)
 
 login_gate(); header()
-tabs=st.tabs(['Dashboard','Ahorro','Nóminas','Intereses','IRPF','Backup'])
+tabs=st.tabs(['📊 Dashboard','🐷 Ahorro','👤 Nóminas','％ Intereses','📋 IRPF','☁️ Backup'])
 with tabs[0]: render_dashboard()
 with tabs[1]: render_ahorro()
 with tabs[2]: render_nominas()
