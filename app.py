@@ -22,7 +22,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.8.3"
+APP_VERSION = "0.8.4"
 APP_UPDATED = "18/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -124,7 +124,7 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem
 .footer-right{display:flex;align-items:center;justify-content:flex-end;gap:10px;opacity:.9;}
 .footer-meta{font-weight:750;opacity:.9}.footer-user{font-weight:850;opacity:.9}.footer-dot{opacity:.45}.footer-logout button{font-size:.95rem!important;padding:.2rem .52rem!important;min-height:30px!important;border-color:rgba(128,128,128,.35)!important;}
 .irpf-desktop{display:block}.irpf-mobile{display:none}
-.irpf-block{border:1px solid rgba(128,128,128,.22);border-radius:12px;overflow:hidden;margin-bottom:1rem}.irpf-block-title{background:#2F3B4F;color:#fff;font-weight:900;font-size:1.15rem;padding:.75rem;border-bottom:2px solid #00a2eb}.irpf-row{display:grid;grid-template-columns:1fr auto;gap:.75rem;padding:.7rem .75rem;border-bottom:1px solid rgba(128,128,128,.18);align-items:center}.irpf-row:last-child{border-bottom:none}.irpf-row .num{font-weight:900;white-space:nowrap;font-variant-numeric:tabular-nums}.irpf-final{padding:.75rem;font-weight:900;text-align:center;border-radius:10px;margin-top:.6rem}
+.irpf-block{border:1px solid rgba(128,128,128,.22);border-radius:12px;overflow:hidden;margin-bottom:1rem}.irpf-block-title{background:#2F3B4F;color:#fff;font-weight:900;font-size:1.15rem;padding:.75rem;border-bottom:2px solid #c3005e}.irpf-row{display:grid;grid-template-columns:1fr auto;gap:.75rem;padding:.7rem .75rem;border-bottom:1px solid rgba(128,128,128,.18);align-items:center}.irpf-row:last-child{border-bottom:none}.irpf-row .num{font-weight:900;white-space:nowrap;font-variant-numeric:tabular-nums}.irpf-final{padding:.75rem;font-weight:900;text-align:center;border-radius:10px;margin-top:.6rem}
 .company-card{border:1px solid rgba(128,128,128,.22);border-radius:14px;padding:1rem;background:rgba(47,59,79,.18);}
 .company-preview{display:flex;align-items:center;justify-content:center;border-radius:14px;padding:1rem;margin:.5rem 0;border:1px solid rgba(128,128,128,.25);min-height:92px}.company-preview img{max-height:78px;max-width:95%;object-fit:contain;}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:18px;}
@@ -134,7 +134,7 @@ thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem
 .vadillo-box{background:#fff;border-radius:16px;padding:12px;border:1px solid rgba(128,128,128,.2);display:flex;align-items:center;justify-content:center;margin-bottom:1rem;}
 .vadillo-box img{max-height:78px;max-width:95%;object-fit:contain;}
 @media (prefers-color-scheme: dark){.vadillo-box{background:#111827}.vadillo-box img{filter: grayscale(1) brightness(0) invert(1);}}
-.payroll-table{width:100%;border-collapse:collapse;font-size:1.00rem;table-layout:fixed}.payroll-table th{background:#2F3B4F;color:#fff;padding:6px 6px;border-bottom:2px solid #00a2eb;text-align:right}.payroll-table th:first-child,.payroll-table td:first-child{text-align:left}.payroll-table td{padding:5px 6px;border:1px solid rgba(128,128,128,.22);text-align:right;font-variant-numeric:tabular-nums}.payroll-ok{background:rgba(16,185,129,.18)}.payroll-warn{background:rgba(245,158,11,.16)}.payroll-bad{background:rgba(220,38,38,.20)}.payroll-income{background:rgba(59,130,246,.18)!important;color:#dbeafe!important;font-weight:900}.compact-editor [data-testid="stDataFrame"]{font-size:.98rem!important}.irpf-table{width:100%;border-collapse:collapse;font-size:1.05rem}.irpf-table th{background:#2F3B4F;color:white;padding:9px;border-bottom:2px solid #00a2eb}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
+.payroll-table{width:100%;border-collapse:collapse;font-size:1.00rem;table-layout:fixed}.payroll-table th{background:#2F3B4F;color:#fff;padding:6px 6px;border-bottom:2px solid #00a2eb;text-align:right}.payroll-table th:first-child,.payroll-table td:first-child{text-align:left}.payroll-table td{padding:5px 6px;border:1px solid rgba(128,128,128,.22);text-align:right;font-variant-numeric:tabular-nums}.payroll-ok{background:rgba(16,185,129,.18)}.payroll-warn{background:rgba(245,158,11,.16)}.payroll-bad{background:rgba(220,38,38,.20)}.payroll-income{background:rgba(59,130,246,.18)!important;color:#dbeafe!important;font-weight:900}.compact-editor [data-testid="stDataFrame"]{font-size:.98rem!important}.irpf-table{width:100%;border-collapse:collapse;font-size:1.05rem}.irpf-table th{background:#2F3B4F;color:white;padding:9px;border-bottom:2px solid #c3005e}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
 .interest-summary{padding:.48rem .65rem;border:1px solid rgba(128,128,128,.25);border-radius:10px;line-height:1.35;display:grid;grid-template-rows:auto auto;gap:.22rem;}
 .interest-summary .is-row{display:flex;align-items:center;justify-content:space-between;gap:.8rem;white-space:nowrap;}
 .interest-summary b{font-weight:900}.interest-summary span{font-weight:850;font-variant-numeric:tabular-nums;}
@@ -210,6 +210,14 @@ input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb=
   .bank-icon{height:1.0em!important;width:1.0em!important;}
 }
 
+
+/* Ajustes v0.8.4 */
+.dashboard-tight + div {margin-top:0!important;}
+.account-grid{margin-top:.25rem!important;}
+.account-card{background-size:120% 120%;}
+.bank-chip{background-image:linear-gradient(135deg,rgba(255,255,255,.14),rgba(0,0,0,.16));}
+.irpf-table th{border-bottom:2px solid #c3005e!important;}
+.irpf-block-title{border-bottom:2px solid #c3005e!important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -282,7 +290,28 @@ def is_dark_color(h):
 def readable_text_color(bg):
     return '#FFFFFF' if is_dark_color(bg) else '#111827'
 
+def lighten_hex(h, amount=0.14):
+    r,g,b=hex_to_rgb(h)
+    r=int(r+(255-r)*amount); g=int(g+(255-g)*amount); b=int(b+(255-b)*amount)
+    return f'#{r:02x}{g:02x}{b:02x}'
+
+def darken_hex(h, amount=0.16):
+    r,g,b=hex_to_rgb(h)
+    r=int(r*(1-amount)); g=int(g*(1-amount)); b=int(b*(1-amount))
+    return f'#{r:02x}{g:02x}{b:02x}'
+
+def bank_gradient(k):
+    base=bank_color(k)
+    if is_dark_color(base):
+        return f"linear-gradient(135deg,{base},{lighten_hex(base,.18)})"
+    return f"linear-gradient(135deg,{base},{darken_hex(base,.12)})"
+
 def bank_text_color(k):
+    color=bank_color(k)
+    return '#FFFFFF' if is_dark_color(color) else color
+
+def bank_cell_text_color(k):
+    # Para tablas en modo oscuro: si el color corporativo es muy oscuro, usar blanco.
     color=bank_color(k)
     return '#FFFFFF' if is_dark_color(color) else color
 
@@ -979,7 +1008,7 @@ def render_account_cards(df):
         txt=readable_text_color(bg)
         icon=bank_icon_html(k, white=True if is_dark_color(bg) else False, size=24)
         name=html.escape(bank_name(k))
-        html_cards += f"<div class='account-card' style='background:{bg};color:{txt}'><div class='bank'>{icon}{name} · {month_label(last['Fecha'])}</div><div class='amount'>{euro(val)}</div><span class='account-chip'>Saldo actual</span></div>"
+        html_cards += f"<div class='account-card' style='background:{bank_gradient(k)};color:{txt}'><div class='bank'>{icon}{name} · {month_label(last['Fecha'])}</div><div class='amount'>{euro(val)}</div><span class='account-chip'>Saldo actual</span></div>"
     html_cards += "</div>"
     st.markdown(html_cards, unsafe_allow_html=True)
     prev=df[df['Fecha'] < last['Fecha']].sort_values('Fecha')
@@ -1045,7 +1074,7 @@ def render_monthly_cards(df):
 def create_backup_bytes():
     files=['ahorro.csv','bancos.csv','nominas.csv','vacaciones.csv','intereses.csv','festivos.csv','irpf_overrides.csv','empresa_config.csv','saldos.xlsx','mfe_cabecera.png','mfe_favicon.png']
     # Incluye iconos personalizados y bancos si existen.
-    for pat in ['bank_*.*','bbva_*.png','openbank_*.png','cajamar_*.png','empresa_logo.*']:
+    for pat in ['bank_*.*','bbva_*.png','openbank_*.png','cajamar_*.png','empresa_logo.*','empresa_logo_base64.txt']:
         for f in Path('.').glob(pat):
             if f.is_file() and f.name not in files:
                 files.append(f.name)
@@ -1061,7 +1090,7 @@ def create_backup_bytes():
     return bio.getvalue()
 
 def restore_backup(upload):
-    allowed={'ahorro.csv','bancos.csv','nominas.csv','vacaciones.csv','intereses.csv','festivos.csv','irpf_overrides.csv','empresa_config.csv','saldos.xlsx','mfe_cabecera.png','mfe_favicon.png'}
+    allowed={'ahorro.csv','bancos.csv','nominas.csv','vacaciones.csv','intereses.csv','festivos.csv','irpf_overrides.csv','empresa_config.csv','saldos.xlsx','mfe_cabecera.png','mfe_favicon.png','empresa_logo_base64.txt'}
     prefixes=('bank_','bbva_','openbank_','cajamar_','empresa_logo')
     data=upload.getvalue()
     with zipfile.ZipFile(io.BytesIO(data),'r') as z:
@@ -1085,8 +1114,44 @@ def render_backup():
         st.success('Backup restaurado. Recargando app...')
         st.rerun()
 
+def render_ahorro_acumulado_anual(df):
+    if df.empty:
+        return
+    d=df[df['Total']>0].sort_values('Fecha').copy()
+    if d.empty or 'Diferencia' not in d:
+        return
+    d['Anio']=pd.to_datetime(d['Fecha'], errors='coerce').dt.year
+    annual=d.groupby('Anio', as_index=False)['Diferencia'].sum().rename(columns={'Diferencia':'Ahorro anual'})
+    annual=annual.sort_values('Anio')
+    annual['Ahorro acumulado']=annual['Ahorro anual'].cumsum()
+    if annual.empty:
+        return
+    st.markdown('### Ahorro acumulado por años')
+    c1,c2=st.columns([.95,1.35])
+    show=annual.copy()
+    show['Año']=show['Anio'].astype(int)
+    show=show[['Año','Ahorro anual','Ahorro acumulado']]
+    show_fmt=show.copy()
+    show_fmt['Ahorro anual']=show_fmt['Ahorro anual'].apply(euro)
+    show_fmt['Ahorro acumulado']=show_fmt['Ahorro acumulado'].apply(euro)
+    with c1:
+        try:
+            sty=pd.DataFrame('', index=show_fmt.index, columns=show_fmt.columns)
+            sty['Ahorro anual']=['color:#22c55e;font-weight:900;' if money(v)>=0 else 'color:#ef4444;font-weight:900;' for v in show['Ahorro anual']]
+            sty['Ahorro acumulado']=['color:#22c55e;font-weight:900;' if money(v)>=0 else 'color:#ef4444;font-weight:900;' for v in show['Ahorro acumulado']]
+            st.dataframe(show_fmt.style.apply(lambda _x: sty, axis=None), hide_index=True, use_container_width=True)
+        except Exception:
+            st.dataframe(show_fmt, hide_index=True, use_container_width=True)
+    with c2:
+        fig=go.Figure()
+        fig.add_trace(go.Bar(x=annual['Anio'].astype(str), y=annual['Ahorro anual'], name='Ahorro anual', marker_color='#22c55e'))
+        fig.add_trace(go.Scatter(x=annual['Anio'].astype(str), y=annual['Ahorro acumulado'], name='Ahorro acumulado', mode='lines+markers', line=dict(width=3, color='#2563eb')))
+        fig.update_layout(height=360, margin=dict(l=15,r=15,t=35,b=15), legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1))
+        st.plotly_chart(fig, use_container_width=True, key='ahorro_acumulado_anual')
+
 def render_dashboard():
     st.header('📊 Dashboard')
+    st.markdown("<div class='dashboard-tight'></div>", unsafe_allow_html=True)
     df=load_ahorro()
     kpis(df)
     render_account_cards(df)
@@ -1121,7 +1186,7 @@ def render_ahorro():
     charts(df, "ahorro")
     st.subheader('Tabla de saldos')
     chips=st.columns(max(1,len(keys)))
-    for i,k in enumerate(keys): chips[i].markdown(f"<div class='bank-chip' style='background:{bank_color(k)}'>{bank_icon_html(k, white=True, size=22)}{bank_name(k)}</div>", unsafe_allow_html=True)
+    for i,k in enumerate(keys): chips[i].markdown(f"<div class='bank-chip' style='background:{bank_gradient(k)};color:{readable_text_color(bank_color(k))}'>{bank_icon_html(k, white=True, size=22)}{bank_name(k)}</div>", unsafe_allow_html=True)
     table=df.sort_values('Fecha', ascending=False).copy(); table['Mes']=table['Fecha'].apply(month_label)
     show_cols=['Mes']+keys+['Total','Diferencia']
     raw_show=table[show_cols].rename(columns={k:bank_name(k) for k in keys})
@@ -1137,7 +1202,7 @@ def render_ahorro():
                 if str(bank_name(k)).strip().upper() == 'BBVA' or str(k).strip().upper() == 'BBVA':
                     style_df[col_name] = 'font-weight: 900;'
                 else:
-                    style_df[col_name] = f'color: {bank_color(k)}; font-weight: 900;'
+                    style_df[col_name] = f'color: {bank_cell_text_color(k)}; font-weight: 900;'
         if 'Diferencia' in style_df.columns:
             diffs = raw_show['Diferencia'].apply(money).tolist()
             style_df['Diferencia'] = [
@@ -1207,6 +1272,12 @@ def load_empresa_config():
     r['ColorTexto']=str(r.get('ColorTexto') or '#FFFFFF')
     r['LogoArchivo']=str(r.get('LogoArchivo') or '')
     r['LogoBase64']='' if pd.isna(r.get('LogoBase64')) else str(r.get('LogoBase64') or '')
+    # Respaldo adicional en archivo de texto por si el CSV pierde la columna tras una actualización.
+    if (not r['LogoBase64'] or r['LogoBase64'].lower() in ('nan','none')) and Path('empresa_logo_base64.txt').exists():
+        try:
+            r['LogoBase64']=Path('empresa_logo_base64.txt').read_text(encoding='utf-8').strip()
+        except Exception:
+            pass
     r['LogoExt']='png' if pd.isna(r.get('LogoExt')) else str(r.get('LogoExt') or 'png').replace('.','')
     try: r['Pagas']=int(float(r.get('Pagas') or 12))
     except Exception: r['Pagas']=12
@@ -1223,6 +1294,11 @@ def save_empresa_config(cfg):
         cfg['Pagas'] = 12
     df = pd.DataFrame([cfg], columns=['Nombre','ColorFondo','ColorTexto','LogoArchivo','Pagas','LogoBase64','LogoExt'])
     save_csv('empresa_config.csv', df)
+    if str(cfg.get('LogoBase64') or '').strip():
+        try:
+            Path('empresa_logo_base64.txt').write_text(str(cfg.get('LogoBase64')), encoding='utf-8')
+        except Exception:
+            pass
     st.session_state['empresa_cfg_cache'] = cfg.copy()
 
 def empresa_logo_src(cfg=None):
@@ -1284,6 +1360,12 @@ def render_empresa_config():
             st.session_state['empresa_logo_pending']={'LogoArchivo':logo_file,'LogoBase64':logo_b64,'LogoExt':logo_ext}
             try:
                 Path(logo_file).write_bytes(data)
+                Path('empresa_logo_base64.txt').write_text(logo_b64, encoding='utf-8')
+            except Exception:
+                pass
+            # Guardado inmediato para que el logo esté disponible en otros dispositivos sin esperar otro clic.
+            try:
+                save_empresa_config({'Nombre':nombre,'ColorFondo':fondo,'ColorTexto':texto,'LogoArchivo':logo_file,'Pagas':pagas,'LogoBase64':logo_b64,'LogoExt':logo_ext})
             except Exception:
                 pass
         preview_cfg={'LogoBase64':logo_b64,'LogoExt':logo_ext,'LogoArchivo':logo_file}
