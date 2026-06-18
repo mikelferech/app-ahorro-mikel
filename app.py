@@ -22,7 +22,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.8.12"
+APP_VERSION = "0.8.14"
 APP_UPDATED = "18/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -42,29 +42,208 @@ def get_page_icon():
 
 st.set_page_config(page_title=APP_TITLE, page_icon=get_page_icon(), layout="wide", initial_sidebar_state="collapsed")
 
-# Intenta forzar nombre, favicon y manifiesto PWA en navegadores compatibles.
-# En Streamlit Cloud no siempre se respeta al 100%, pero ayuda en Chrome/Android.
-components.html("""
-<script>
-(function(){
-  const d = window.parent.document;
-  d.title = 'Ahorro Mikel';
-  function upsert(tag, attrs){
-    let q = tag;
-    if(attrs.rel) q += '[rel="'+attrs.rel+'"]';
-    let el = d.querySelector(q);
-    if(!el){ el = d.createElement(tag); d.head.appendChild(el); }
-    Object.entries(attrs).forEach(([k,v]) => el.setAttribute(k,v));
-  }
-  upsert('link', {rel:'icon', href:'mfe_favicon.png?v=089', type:'image/png'});
-  upsert('link', {rel:'apple-touch-icon', href:'mfe_icon_192.png?v=089'});
-  upsert('link', {rel:'manifest', href:'manifest.json?v=089'});
-  upsert('meta', {name:'theme-color', content:'#00a2eb'});
-  upsert('meta', {name:'apple-mobile-web-app-title', content:'Ahorro Mikel'});
-  upsert('meta', {name:'application-name', content:'Ahorro Mikel'});
-})();
-</script>
-""", height=0, width=0)
+# PWA/head injection desactivada temporalmente: en Streamlit puede crear un iframe invisible que rompe el layout.
+
+st.markdown("""
+<style>
+.main .block-container {padding-top: 1.4rem; max-width: 1780px; font-size: 1.05rem;}
+html, body, .stApp {font-size:16px!important;}
+label, input, textarea, button, [data-testid="stWidgetLabel"] {font-size:1.00rem!important;}
+h1 {font-size: 2.65rem !important;}
+h2 {font-size: 2.05rem !important;} h3 {font-size: 1.55rem !important;}
+[data-testid="stHeader"] {height:0rem!important;}
+[data-testid="stMetricLabel"] {font-size: 1.06rem !important; font-weight: 900 !important;}
+[data-testid="stMetricValue"] {font-size: 2.35rem !important; line-height:1.05!important;}
+[data-testid="stMetricDelta"] {font-size: 1.00rem !important;}
+.stTabs [data-baseweb="tab"] {height:2.75rem!important; padding-left:.75rem!important; padding-right:.75rem!important;}
+
+.stTabs [aria-selected="true"] p, .stTabs [aria-selected="true"] {color:#00a2eb!important;}
+.stTabs [data-baseweb="tab-highlight"] {background-color:#00a2eb!important;}
+.stTabs [data-baseweb="tab"]:hover p, .stTabs [role="tab"]:hover p {color:#00a2eb!important;}
+.stTabs [data-baseweb="tab"]:hover {border-color:#00a2eb!important;}
+[data-testid="stDecoration"] {background:#00a2eb!important;}
+.stTabs [data-baseweb="tab"] p, .stTabs [role="tab"] p {font-size: 1.05rem !important; font-weight: 900 !important;}
+[data-testid="stExpander"] summary p {font-size:1.08rem!important; font-weight:900!important;}
+.stDataFrame, [data-testid="stDataFrame"] {font-size: 1.05rem !important;}
+[data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [data-testid="stDataFrameResizable"] {background:#2F3B4F!important;color:#fff!important;font-weight:900!important;font-size:1.05rem!important;border-bottom:2px solid #00a2eb!important;}
+[data-testid="stDataFrame"] div[role="columnheader"] {background:#2F3B4F!important;color:#fff!important;}
+thead tr th {background:#2F3B4F!important;color:#fff!important;font-size:1.05rem!important;border-bottom:2px solid #00a2eb!important;}
+[data-testid="stDataFrame"] [role="gridcell"] {font-size:1.00rem!important;}
+.login-card {max-width:560px;margin:3.5rem auto 1rem auto;padding:1.8rem;border:1px solid rgba(128,128,128,.25);border-radius:24px;background:rgba(128,128,128,.06);text-align:center;}
+.login-card img {max-width:360px;width:88%;margin-bottom:.6rem;}
+.login-wrap {max-width:620px;margin:0 auto;}
+.header-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:.25rem;min-height:0;}
+.brand{display:flex;align-items:flex-start;gap:10px;}
+.brand img{height:64px;max-width:280px;object-fit:contain;}
+.brand h1{display:none!important;}
+.userbox{text-align:right;min-width:150px;margin-top:.1rem;}
+.logout-inline{display:flex;align-items:center;justify-content:flex-end;gap:10px;}
+.logout-inline .user{font-weight:800;opacity:.85;font-size:1rem;}
+.logout-icon button{font-size:1.25rem!important;padding:.25rem .58rem!important;min-height:34px!important;}
+.bank-chip{border-radius:10px;padding:10px 12px;color:white;font-weight:900;text-align:center;margin-bottom:10px;font-size:1.05rem;}
+.bank-icon{height:1.18em;width:1.18em;object-fit:contain;vertical-align:-0.20em;margin-right:.38em;display:inline-block;}
+.account-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:1rem 0 1.2rem;}
+.account-card{border-radius:18px;padding:1rem 1.15rem;color:#fff;font-weight:800;box-shadow:0 8px 24px rgba(0,0,0,.16);}
+.account-card .bank{font-size:1.05rem;opacity:.92;display:flex;align-items:center;gap:.35rem;}
+.account-card .amount{font-size:1.55rem;font-weight:950;margin-top:.35rem;}
+.account-total{border:1px solid rgba(128,128,128,.22);border-radius:18px;padding:1rem 1.15rem;margin:1rem 0;background:rgba(47,59,79,.14);}
+.monthly-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin:.7rem 0 1rem;}
+.month-card{border-radius:16px;padding:.8rem .55rem;text-align:center;font-weight:900;}
+.month-card .m{opacity:.9;font-size:1rem}.month-card .v{font-size:1.15rem;margin-top:.18rem}.month-pos{background:rgba(22,163,74,.26);color:#86efac}.month-neg{background:rgba(220,38,38,.24);color:#fecaca}.month-zero{background:rgba(107,114,128,.22);color:#e5e7eb}
+.backup-card{border:1px solid rgba(128,128,128,.25);border-radius:16px;padding:1rem;background:rgba(47,59,79,.13);margin:.8rem 0;}
+.bank-name-cell{font-weight:900;display:inline-flex;align-items:center;gap:.35rem;}
+
+.saldo-table-wrap{width:100%;overflow-x:auto;border:1px solid rgba(0,162,235,.85);border-radius:10px;margin-top:.35rem;}
+.saldo-table{width:100%;border-collapse:collapse;font-size:1.00rem;min-width:760px;}
+.saldo-table th{background:#1f2530!important;color:#cbd5e1!important;text-align:left;padding:9px 10px;border-bottom:1px solid rgba(148,163,184,.25);font-weight:850;}
+.saldo-table td{padding:8px 10px;border-bottom:1px solid rgba(148,163,184,.15);border-right:1px solid rgba(148,163,184,.14);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.saldo-table tr:last-child td{border-bottom:none;}
+.saldo-table .month-cell{color:#f8fafc;font-weight:800;}
+.saldo-table .bank-amount{font-weight:950;}
+.saldo-table .total-cell{color:#f8fafc;font-weight:900;}
+.saldo-table .diff-pos{color:#22c55e;font-weight:950;}
+.saldo-table .diff-neg{color:#ef4444;font-weight:950;}
+.saldo-table .diff-zero{color:#94a3b8;font-weight:850;}
+@media (max-width: 760px){.saldo-table{font-size:.92rem;min-width:680px}.saldo-table th,.saldo-table td{padding:7px 8px}}
+
+
+.row-card{border-bottom:1px solid rgba(128,128,128,.15);padding:.35rem 0;}
+.footer{margin-top:2rem;border-top:1px solid rgba(128,128,128,.22);padding:1rem 0 .2rem;display:flex;align-items:center;justify-content:center;gap:14px;opacity:.8;font-size:.86rem;}
+.footer img{height:24px;width:auto;}
+.app-footer-wrap{margin-top:1.8rem;border-top:1px solid rgba(128,128,128,.22);padding:.65rem 0 .25rem;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;}
+.app-footer{display:flex;align-items:center;justify-content:center;gap:10px;opacity:.88;font-size:.88rem;white-space:nowrap;}
+.app-footer img{height:30px;width:auto;object-fit:contain;}
+.footer-right{display:flex;align-items:center;justify-content:flex-end;gap:10px;opacity:.9;}
+.footer-meta{font-weight:750;opacity:.9}.footer-user{font-weight:850;opacity:.9}.footer-dot{opacity:.45}.footer-logout button{font-size:.95rem!important;padding:.2rem .52rem!important;min-height:30px!important;border-color:rgba(128,128,128,.35)!important;}
+.irpf-desktop{display:block}.irpf-mobile{display:none}
+.irpf-block{border:1px solid rgba(128,128,128,.22);border-radius:12px;overflow:hidden;margin-bottom:1rem}.irpf-block-title{background:#2F3B4F;color:#fff;font-weight:900;font-size:1.15rem;padding:.75rem;border-bottom:2px solid #c3005e}.irpf-row{display:grid;grid-template-columns:1fr auto;gap:.75rem;padding:.7rem .75rem;border-bottom:1px solid rgba(128,128,128,.18);align-items:center}.irpf-row:last-child{border-bottom:none}.irpf-row .num{font-weight:900;white-space:nowrap;font-variant-numeric:tabular-nums}.irpf-final{padding:.75rem;font-weight:900;text-align:center;border-radius:10px;margin-top:.6rem}
+.company-card{border:1px solid rgba(128,128,128,.22);border-radius:14px;padding:1rem;background:rgba(47,59,79,.18);}
+.company-preview{display:flex;align-items:center;justify-content:center;border-radius:14px;padding:1rem;margin:.5rem 0;border:1px solid rgba(128,128,128,.25);min-height:92px}.company-preview img{max-height:78px;max-width:95%;object-fit:contain;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:18px;}
+.cal-head{text-align:center;font-weight:900;opacity:.8;font-size:.78rem;}
+.cal-month-title{text-align:center;font-weight:900;margin:.6rem 0 .3rem;font-size:1.12rem}.cal-day{min-height:38px;border-radius:7px;text-align:center;padding:6px;border:1px solid rgba(128,128,128,.18);font-size:.96rem;}
+.cal-empty{opacity:.1}.cal-normal{background:rgba(128,128,128,.08)}.cal-red{background:#b91c1c;color:#fff}.cal-maroon{background:#5b1720;color:#fff}.cal-grey{background:#6b7280;color:#fff}.cal-green{background:#15803d;color:#fff;font-weight:900}
+.vadillo-box{background:#fff;border-radius:16px;padding:12px;border:1px solid rgba(128,128,128,.2);display:flex;align-items:center;justify-content:center;margin-bottom:1rem;}
+.vadillo-box img{max-height:78px;max-width:95%;object-fit:contain;}
+@media (prefers-color-scheme: dark){.vadillo-box{background:#111827}.vadillo-box img{filter: grayscale(1) brightness(0) invert(1);}}
+.payroll-table{width:100%;border-collapse:collapse;font-size:1.00rem;table-layout:fixed}.payroll-table th{background:#2F3B4F;color:#fff;padding:6px 6px;border-bottom:2px solid #00a2eb;text-align:right}.payroll-table th:first-child,.payroll-table td:first-child{text-align:left}.payroll-table td{padding:5px 6px;border:1px solid rgba(128,128,128,.22);text-align:right;font-variant-numeric:tabular-nums}.payroll-ok{background:rgba(16,185,129,.18)}.payroll-warn{background:rgba(245,158,11,.16)}.payroll-bad{background:rgba(220,38,38,.20)}.payroll-income{background:rgba(59,130,246,.18)!important;color:#dbeafe!important;font-weight:900}.compact-editor [data-testid="stDataFrame"]{font-size:.98rem!important}.irpf-table{width:100%;border-collapse:collapse;font-size:1.05rem}.irpf-table th{background:#c3005e!important;color:white!important;padding:9px;border-bottom:2px solid #c3005e!important}.irpf-table td{padding:6px 8px;border:1px solid rgba(128,128,128,.22)}.irpf-sec{background:#5f5f5f;color:white;font-weight:800}.irpf-pink{background:#ffd0d0;color:#111}.irpf-result-ok{background:#00c800!important;color:white!important;font-weight:900}.irpf-result-bad{background:#dc2626!important;color:white!important;font-weight:900}.irpf-num{text-align:right;font-variant-numeric:tabular-nums}.muted{opacity:.7}
+.interest-summary{padding:.48rem .65rem;border:1px solid rgba(128,128,128,.25);border-radius:10px;line-height:1.35;display:grid;grid-template-rows:auto auto;gap:.22rem;}
+.interest-summary .is-row{display:flex;align-items:center;justify-content:space-between;gap:.8rem;white-space:nowrap;}
+.interest-summary b{font-weight:900}.interest-summary span{font-weight:850;font-variant-numeric:tabular-nums;}
+
+
+/* Tablas Ahorro: importes por banco en color y diferencia positivo/negativo */
+[data-testid="stDataFrame"] .bank-colored {font-weight:900!important;}
+
+/* Azul MFE también en hover/focus de formularios y botones */
+.stButton > button:hover, .stDownloadButton > button:hover {
+  border-color:#00a2eb!important;
+  color:#00a2eb!important;
+}
+.stButton > button:focus, .stDownloadButton > button:focus {
+  border-color:#00a2eb!important;
+  box-shadow:0 0 0 0.12rem rgba(0,162,235,.35)!important;
+}
+input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb="select"]:focus-within {
+  border-color:#00a2eb!important;
+  box-shadow:0 0 0 1px #00a2eb!important;
+}
+[data-baseweb="input"]:hover, [data-baseweb="select"]:hover {
+  border-color:#00a2eb!important;
+}
+
+
+/* Vista móvil: tablas complejas convertidas en tarjetas */
+.mobile-payroll {display:none;}
+.desktop-payroll {display:block;}
+@media (max-width: 760px){
+  .main .block-container {padding-left:.65rem!important; padding-right:.65rem!important; font-size:1rem!important;}
+  .desktop-payroll {display:none!important;}
+  .mobile-payroll {display:block!important;}
+  .irpf-desktop{display:none!important}.irpf-mobile{display:block!important}
+  .app-footer-wrap{grid-template-columns:1fr;gap:.45rem;justify-items:center}.footer-right{justify-content:center}.app-footer{white-space:normal;flex-wrap:wrap;gap:.45rem;font-size:.82rem}.app-footer img{height:24px}.footer-meta{font-size:.82rem}.footer-user{font-size:.84rem}
+  .irpf-row{font-size:1rem;}
+  .pay-card{border:1px solid rgba(128,128,128,.30); border-radius:14px; padding:.8rem; margin:.7rem 0; background:rgba(47,59,79,.22);} 
+  .pay-card.ok{background:rgba(16,185,129,.16);} .pay-card.warn{background:rgba(245,158,11,.16);} .pay-card.bad{background:rgba(220,38,38,.18);} 
+  .pay-head{display:flex;justify-content:space-between;align-items:center;font-weight:900;font-size:1.1rem;margin-bottom:.45rem;}
+  .pay-grid{display:grid;grid-template-columns:1fr 1fr;gap:.35rem .65rem;font-size:.95rem;}
+  .pay-grid div:nth-child(even){text-align:right;font-weight:800;}
+  .brand img{height:54px!important;max-width:240px!important;}
+  [data-testid="stMetricValue"] {font-size:1.9rem!important;}
+  h1 {font-size:2.1rem!important;} h2{font-size:1.65rem!important;} h3{font-size:1.28rem!important;}
+}
+/* Quitar últimos restos rojos de foco/hover */
+* { --primary-color:#00a2eb; }
+[data-baseweb="tab"]:hover, [data-baseweb="tab"][aria-selected="true"] {color:#00a2eb!important;}
+.st-emotion-cache-10trblm, .st-emotion-cache-16idsys p {caret-color:#00a2eb!important;}
+
+/* Modernización visual v0.8.3 */
+:root{--mfe-blue:#00a2eb;--mfe-purple:#8b5cf6;--mfe-green:#22c55e;--mfe-red:#ef4444;}
+.stButton > button, .stDownloadButton > button{border-radius:12px!important;font-weight:900!important;}
+.modern-pill{display:inline-flex;align-items:center;gap:.35rem;padding:.22rem .62rem;border-radius:999px;background:rgba(0,162,235,.16);color:#7dd3fc;font-weight:900;font-size:.82rem;margin-top:.45rem;}
+.metric-card{border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:1.0rem 1.15rem;background:linear-gradient(135deg,rgba(0,162,235,.20),rgba(15,23,42,.55));box-shadow:0 10px 28px rgba(0,0,0,.20);min-height:132px;}
+.metric-card .mc-title{font-weight:850;opacity:.95;font-size:1.00rem;display:flex;align-items:center;gap:.5rem;}
+.metric-card .mc-value{font-size:1.75rem;line-height:1.10;font-weight:950;margin-top:.6rem;}
+.metric-card .mc-sub{margin-top:.45rem;opacity:.78;font-weight:750;font-size:.88rem;}
+.metric-card.bad{background:linear-gradient(135deg,rgba(127,29,29,.40),rgba(15,23,42,.58));}
+.metric-card.good{background:linear-gradient(135deg,rgba(20,83,45,.42),rgba(15,23,42,.58));}
+.metric-card.purple{background:linear-gradient(135deg,rgba(88,28,135,.42),rgba(15,23,42,.58));}
+.account-card{background-image:linear-gradient(135deg,rgba(255,255,255,.08),rgba(0,0,0,.18));}
+.account-card .account-chip{display:inline-block;border-radius:999px;padding:.20rem .55rem;background:rgba(255,255,255,.15);font-size:.78rem;font-weight:900;margin-top:.45rem;}
+.account-total{background:linear-gradient(135deg,rgba(15,23,42,.88),rgba(0,162,235,.12))!important;box-shadow:0 8px 26px rgba(0,0,0,.18);}
+.bank-chip{box-shadow:0 8px 22px rgba(0,0,0,.18);}
+.irpf-table td,.irpf-table th{white-space:nowrap;}
+@media (max-width: 760px){
+  .metric-card{min-height:110px;margin-bottom:.65rem;}
+  .metric-card .mc-value{font-size:1.55rem;}
+  .irpf-table{font-size:.92rem!important;}
+  .irpf-table td,.irpf-table th{padding:5px 6px!important;white-space:nowrap;}
+  .bank-name-cell{gap:.25rem;}
+  .bank-icon{height:1.0em!important;width:1.0em!important;}
+}
+
+
+/* Ajustes v0.8.4 */
+
+/* Ajuste específico Dashboard v0.8.11: quitar hueco superior real sin comprimir el resto */
+.stTabs [data-baseweb="tab-panel"]{padding-top:.70rem!important;}
+.stTabs [data-testid="stVerticalBlock"]{gap:1rem!important;}
+.dashboard-kpi-start{height:0!important;min-height:0!important;margin:0!important;padding:0!important;line-height:0!important;overflow:hidden!important;}
+.element-container:has(.dashboard-kpi-start){height:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important;}
+.account-grid{margin-top:.75rem!important;}
+.account-card{background-size:120% 120%;}
+.bank-chip{background-image:linear-gradient(135deg,rgba(255,255,255,.14),rgba(0,0,0,.16));}
+.irpf-table th{background:#c3005e!important;border-bottom:2px solid #c3005e!important;}
+.irpf-block-title{background:#c3005e!important;border-bottom:2px solid #c3005e!important;}
+
+/* v0.8.12: eliminar huecos fantasma generados por contenedores vacíos de Streamlit tabs */
+div[data-testid="stTabs"] div[data-baseweb="tab-panel"]{
+  padding-top:0!important;
+  margin-top:0!important;
+}
+div[data-testid="stTabs"] div[data-baseweb="tab-panel"] > div:first-child{
+  padding-top:0!important;
+  margin-top:0!important;
+}
+div[data-testid="stTabs"] div[data-testid="stVerticalBlock"]{
+  padding-top:0!important;
+  margin-top:0!important;
+}
+div[data-testid="stTabs"] div[data-testid="stVerticalBlock"] > div:empty{
+  display:none!important;
+  height:0!important;
+  min-height:0!important;
+  margin:0!important;
+  padding:0!important;
+  overflow:hidden!important;
+}
+/* Recupera un margen equilibrado entre la barra de pestañas y el primer bloque real */
+div[data-testid="stTabs"] div[data-baseweb="tab-panel"] .account-grid:first-of-type{
+  margin-top:.9rem!important;
+}
+
+</style>
+""", unsafe_allow_html=True)
 
 # ---------- util ----------
 def b64(path: Path):
