@@ -29,7 +29,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.9.2"
+APP_VERSION = "0.9.3"
 APP_UPDATED = "19/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -38,6 +38,7 @@ MFE_FAVICON = Path("mfe_favicon.png")
 VADILLO_LOGO = Path("vadillo.svg")
 MONTHS_ES = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"]
 VACACIONES_ANUALES = 23
+calendar.setfirstweekday(calendar.MONDAY)
 
 def get_page_icon():
     if Image is not None and MFE_FAVICON.exists():
@@ -70,6 +71,14 @@ h2 {font-size: 2.05rem !important;} h3 {font-size: 1.55rem !important;}
 .stTabs [data-baseweb="tab"]:hover {border-color:#00a2eb!important;}
 [data-testid="stDecoration"] {background:#00a2eb!important;}
 .stTabs [data-baseweb="tab"] p, .stTabs [role="tab"] p {font-size: 1.05rem !important; font-weight: 900 !important;}
+
+/* Navegación tipo pestañas pero con renderizado perezoso: evita cargar todas las pestañas a la vez */
+[data-testid="stRadio"] [role="radiogroup"]{display:flex;gap:1.55rem;align-items:center;border-bottom:1px solid rgba(128,128,128,.28);margin-bottom:1.1rem;overflow-x:auto;white-space:nowrap;}
+[data-testid="stRadio"] label{font-weight:900!important;padding:.45rem .15rem .6rem .15rem;border-bottom:3px solid transparent;}
+[data-testid="stRadio"] label:has(input:checked){color:#00a2eb!important;border-bottom-color:#00a2eb;}
+[data-testid="stRadio"] label:hover{color:#00a2eb!important;}
+[data-testid="stRadio"] div[role="radiogroup"] > label > div:first-child{display:none!important;}
+
 [data-testid="stExpander"] summary p {font-size:1.08rem!important; font-weight:900!important;}
 .stDataFrame, [data-testid="stDataFrame"] {font-size: 1.05rem !important;}
 [data-testid="stDataFrame"] [role="columnheader"], [data-testid="stDataFrame"] [data-testid="stDataFrameResizable"] {background:#2F3B4F!important;color:#fff!important;font-weight:900!important;font-size:1.05rem!important;border-bottom:2px solid #00a2eb!important;}
@@ -1778,6 +1787,28 @@ def laboral_days_between(a, b, year):
             total += 1
     return total
 
+
+def vacation_overlap_message(vac_df, year, ini, fin, exclude_idx=None):
+    """Devuelve mensaje si el periodo se solapa con vacaciones existentes del mismo año."""
+    if fin < ini:
+        return 'La fecha de fin no puede ser anterior a la fecha de inicio.'
+    if vac_df is None or vac_df.empty:
+        return ''
+    df = vac_df.copy().reset_index(drop=True)
+    if 'Anio' not in df:
+        return ''
+    df['Anio'] = pd.to_numeric(df['Anio'], errors='coerce').fillna(year).astype(int)
+    df['Inicio_dt'] = pd.to_datetime(df.get('Inicio'), errors='coerce').dt.date
+    df['Fin_dt'] = pd.to_datetime(df.get('Fin'), errors='coerce').dt.date
+    df = df[(df['Anio'] == year) & df['Inicio_dt'].notna() & df['Fin_dt'].notna()]
+    for idx, r in df.iterrows():
+        if exclude_idx is not None and int(idx) == int(exclude_idx):
+            continue
+        a, b = r['Inicio_dt'], r['Fin_dt']
+        if not (fin < a or ini > b):
+            return f"Ese periodo se solapa con {date_label(a)} → {date_label(b)}."
+    return ''
+
 def calendar_month_html(y, m, vac_days=set(), fest=None):
     fest = fest or set(pd.to_datetime(load_festivos(y).query('Activo == True')['Fecha'], errors='coerce').dt.date)
     first=date(y,m,1); start=first-timedelta(days=first.weekday()); days=[start+timedelta(days=i) for i in range(42)]
@@ -1818,15 +1849,24 @@ def render_vacaciones(year):
     st.metric('Días restantes', f"{VACACIONES_ANUALES-used:g}", delta=f"Usados: {used:g}")
 
     with st.expander('➕ Añadir vacaciones', expanded=False):
-        ini=st.date_input('Inicio', value=date(year, date.today().month, 1), min_value=date(year,1,1), max_value=date(year,12,31), format='DD/MM/YYYY', key=f'vac_ini_{year}')
-        fin=st.date_input('Fin', value=ini, min_value=ini, max_value=date(year,12,31), format='DD/MM/YYYY', key=f'vac_fin_{year}_{ini.isoformat()}')
-        calc=laboral_days_between(ini, fin, year)
-        dias=st.number_input('Días computables', value=float(calc), step=.5, format='%.1f', help='Calculado automáticamente solo con laborables: excluye sábados, domingos y festivos. Puedes editarlo si hace falta.', key=f'vac_dias_{year}_{ini.isoformat()}_{fin.isoformat()}')
-        nota=st.text_input('Nota', key=f'vac_nota_{year}_{ini.isoformat()}')
-        if st.button('Guardar vacaciones', use_container_width=True, key=f'vac_save_{year}'):
-            row={'Anio':year,'Inicio':ini.isoformat(),'Fin':fin.isoformat(),'Dias':dias,'Nota':nota}
-            save_vacaciones(pd.concat([vac,pd.DataFrame([row])], ignore_index=True))
-            st.rerun()
+        st.caption('El calendario anual de la app empieza en lunes. El selector emergente depende del navegador; validamos fechas y solapes al guardar.')
+        with st.form(f'vac_form_add_{year}', clear_on_submit=False):
+            cini, cfin = st.columns(2)
+            ini=cini.date_input('Inicio', value=date(year, date.today().month, 1), min_value=date(year,1,1), max_value=date(year,12,31), format='DD/MM/YYYY', key=f'vac_ini_{year}')
+            fin=cfin.date_input('Fin', value=date(year, date.today().month, 1), min_value=date(year,1,1), max_value=date(year,12,31), format='DD/MM/YYYY', key=f'vac_fin_{year}')
+            calc=laboral_days_between(ini, fin, year) if fin >= ini else 0
+            dias=st.number_input('Días computables', value=float(calc), step=.5, format='%.1f', help='Calculado automáticamente solo con laborables: excluye sábados, domingos y festivos. Puedes editarlo si hace falta.', key=f'vac_dias_{year}')
+            nota=st.text_input('Nota', key=f'vac_nota_{year}')
+            submitted = st.form_submit_button('Guardar vacaciones', use_container_width=True)
+        if submitted:
+            msg = vacation_overlap_message(vac, year, ini, fin)
+            if msg:
+                st.error(msg)
+            else:
+                row={'Anio':year,'Inicio':ini.isoformat(),'Fin':fin.isoformat(),'Dias':dias,'Nota':nota}
+                save_vacaciones(pd.concat([vac,pd.DataFrame([row])], ignore_index=True))
+                st.success('Vacaciones guardadas.')
+                st.rerun()
 
     vac_days=set()
     for _,r in yvac.iterrows():
@@ -1844,7 +1884,8 @@ def render_vacaciones(year):
         disp=disp[['Inicio','Fin','Dias','Nota']]
         st.dataframe(disp, hide_index=True, use_container_width=True)
         with st.expander('✏️ Editar / borrar vacaciones existentes', expanded=False):
-            for i,r in yvac.reset_index(drop=True).iterrows():
+            edit_yvac = yvac.reset_index().rename(columns={'index':'OrigIndex'})
+            for i,r in edit_yvac.iterrows():
                 title=f"{date_label(r['Inicio'])} → {date_label(r['Fin'])} · {money(r['Dias']):g} días"
                 with st.container():
                     st.markdown(f"**{title}**")
@@ -1857,11 +1898,15 @@ def render_vacaciones(year):
                     if c[4].button('💾', key=f'vac_update_{year}_{i}', help='Guardar cambios'):
                         allv=vac.copy().reset_index(drop=True)
                         mask=(allv['Anio'].astype(int)==year)&(pd.to_datetime(allv['Inicio']).dt.date==pd.to_datetime(r['Inicio']).date())&(pd.to_datetime(allv['Fin']).dt.date==pd.to_datetime(r['Fin']).date())&(allv['Nota'].fillna('').astype(str)==str(r.get('Nota','')))
-                        idxs=allv[mask].index.tolist() or [yvac.index[i]]
+                        idxs=allv[mask].index.tolist() or [int(r.get('OrigIndex', i))]
                         idx=idxs[0]
-                        allv.loc[idx, ['Anio','Inicio','Fin','Dias','Nota']] = [year, ini2.isoformat(), fin2.isoformat(), dias2, nota2]
-                        save_vacaciones(allv)
-                        st.rerun()
+                        msg = vacation_overlap_message(allv, year, ini2, fin2, exclude_idx=idx)
+                        if msg:
+                            st.error(msg)
+                        else:
+                            allv.loc[idx, ['Anio','Inicio','Fin','Dias','Nota']] = [year, ini2.isoformat(), fin2.isoformat(), dias2, nota2]
+                            save_vacaciones(allv)
+                            st.rerun()
                     if c[5].button('❌', key=f'vac_delete_{year}_{i}', help='Borrar periodo'):
                         allv=vac.copy().reset_index(drop=True)
                         mask=(allv['Anio'].astype(int)==year)&(pd.to_datetime(allv['Inicio']).dt.date==pd.to_datetime(r['Inicio']).date())&(pd.to_datetime(allv['Fin']).dt.date==pd.to_datetime(r['Fin']).date())&(allv['Nota'].fillna('').astype(str)==str(r.get('Nota','')))
@@ -2024,11 +2069,18 @@ def render_irpf():
     st.markdown(html+mobile, unsafe_allow_html=True)
 
 login_gate(); header()
-tabs=st.tabs(['📊 Dashboard','🐷 Ahorro','👤 Nóminas','％ Intereses','📋 IRPF','☁️ Backup'])
-with tabs[0]: render_dashboard()
-with tabs[1]: render_ahorro()
-with tabs[2]: render_nominas()
-with tabs[3]: render_intereses()
-with tabs[4]: render_irpf()
-with tabs[5]: render_backup()
+NAV_OPTIONS=['📊 Dashboard','🐷 Ahorro','👤 Nóminas','％ Intereses','📋 IRPF','☁️ Backup']
+nav=st.radio('Secciones', NAV_OPTIONS, horizontal=True, label_visibility='collapsed', key='main_nav')
+if nav == '📊 Dashboard':
+    render_dashboard()
+elif nav == '🐷 Ahorro':
+    render_ahorro()
+elif nav == '👤 Nóminas':
+    render_nominas()
+elif nav == '％ Intereses':
+    render_intereses()
+elif nav == '📋 IRPF':
+    render_irpf()
+elif nav == '☁️ Backup':
+    render_backup()
 footer()
