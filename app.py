@@ -29,7 +29,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.9.0"
+APP_VERSION = "0.9.2"
 APP_UPDATED = "19/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -416,31 +416,52 @@ def _df_to_records(df):
             safe[c] = safe[c].astype(str)
         return json.loads(safe.to_json(orient="records", force_ascii=False))
 
-def read_firestore_df(name, columns=None):
-    """Lee DataFrame desde Firestore. Devuelve None si el documento todavía no existe."""
+@st.cache_data(ttl=300, show_spinner=False)
+def _read_firestore_df_cached(name, columns_tuple=()):
+    """Lee un documento Firestore con caché corta para evitar lentitud.
+
+    Devuelve (exists, rows, stored_cols, error). Si exists=True pero rows=[] se
+    considera documento vacío y read_csv podrá sembrar desde el CSV local.
+    """
     if name not in FIRESTORE_FILES:
-        return None
+        return False, [], [], None
     ref = _firestore_doc_ref(name)
     if ref is None:
-        return None
+        return False, [], [], None
     try:
         snap = ref.get()
         if not snap.exists:
-            return None
+            return False, [], [], None
         payload = snap.to_dict() or {}
-        rows = payload.get("rows", [])
-        stored_cols = payload.get("columns", [])
-        df = pd.DataFrame(rows)
-        wanted = columns or stored_cols
-        if wanted:
-            for c in wanted:
-                if c not in df:
-                    df[c] = None
-            df = df[wanted]
-        return df
+        return True, payload.get("rows", []) or [], payload.get("columns", []) or [], None
     except Exception as e:
-        st.session_state["firebase_error"] = str(e)
+        return False, [], [], str(e)
+
+def read_firestore_df(name, columns=None):
+    """Lee DataFrame desde Firestore.
+
+    Importante v0.9.1:
+    - Si el documento existe pero no tiene filas, devolvemos None para permitir
+      migrar desde CSV local/backup.
+    - Las lecturas se cachean 45 segundos para que cada pestaña no consulte
+      Firestore continuamente.
+    """
+    exists, rows, stored_cols, err = _read_firestore_df_cached(name, tuple(columns or ()))
+    if err:
+        st.session_state["firebase_error"] = err
         return None
+    if not exists:
+        return None
+    if not rows:
+        return None
+    df = pd.DataFrame(rows)
+    wanted = columns or stored_cols
+    if wanted:
+        for c in wanted:
+            if c not in df:
+                df[c] = None
+        df = df[wanted]
+    return df
 
 def write_firestore_df(name, df):
     if name not in FIRESTORE_FILES:
@@ -457,6 +478,10 @@ def write_firestore_df(name, df):
             "appVersion": APP_VERSION,
         }
         ref.set(payload)
+        try:
+            _read_firestore_df_cached.clear()
+        except Exception:
+            pass
         return True
     except Exception as e:
         st.session_state["firebase_error"] = str(e)
@@ -491,40 +516,15 @@ def _browser_key(name):
     return "ahorro_mikel_" + name.replace(".", "_")
 
 def read_browser_df(name, columns=None):
-    """v0.8.15: desactivado localStorage en caliente.
-
-    El componente streamlit_js_eval crea iframes invisibles dentro del panel de pestañas.
-    Esos iframes eran los bloques vacíos que generaban el hueco grande del Dashboard.
-    Para mantener el layout estable, la lectura desde navegador queda desactivada en la carga normal.
-    """
     return pd.DataFrame(columns=columns or [])
 
 def write_browser_df(name, df):
-    """v0.8.15: desactivado guardado automático en localStorage para evitar iframes fantasma."""
     return
 
 # ---------- csv storage ----------
 def path(name): DATA.mkdir(exist_ok=True); return DATA/name
 
-def read_csv(name, columns=None):
-    """Lee datos con prioridad Firebase.
-
-    v0.9.0:
-    - Si Firestore tiene documento para este CSV, es la fuente principal.
-    - Si Firestore aún no existe, usa CSV local y lo sube a Firestore como semilla.
-    - Mantiene fallback local para que la app no se rompa si Firebase no está configurado.
-    """
-    remote_df = read_firestore_df(name, columns)
-    if isinstance(remote_df, pd.DataFrame):
-        memory_store()[name] = remote_df.copy()
-        try:
-            tmp = path(name + '.tmp')
-            remote_df.to_csv(tmp, index=False)
-            tmp.replace(path(name))
-        except Exception:
-            pass
-        return remote_df.copy()
-
+def _read_local_csv(name, columns=None):
     p = path(name)
     df = pd.DataFrame(columns=columns or [])
     if p.exists():
@@ -532,41 +532,98 @@ def read_csv(name, columns=None):
             df = pd.read_csv(p)
         except Exception:
             df = pd.DataFrame(columns=columns or [])
-
     if columns:
         for c in columns:
             if c not in df:
                 df[c] = None
         df = df[columns]
+    return df
 
-    if not df.empty:
-        memory_store()[name] = df.copy()
-        write_firestore_df(name, df)
-        return df.copy()
+def _session_df_cache():
+    return st.session_state.setdefault("_ahorro_mikel_df_cache", {})
+
+def _normalize_columns(df, columns=None):
+    df = df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame(columns=columns or [])
+    if columns:
+        for c in columns:
+            if c not in df:
+                df[c] = None
+        df = df[columns]
+    return df
+
+def clear_data_cache(name=None):
+    """Limpia cachés de datos. Si name es None, limpia todo."""
+    cache = _session_df_cache()
+    if name is None:
+        cache.clear()
+        memory_store().clear()
+    else:
+        cache.pop(name, None)
+        memory_store().pop(name, None)
+    try:
+        _read_firestore_df_cached.clear()
+    except Exception:
+        pass
+
+def read_csv(name, columns=None):
+    """Lee datos con caché de sesión + Firestore.
+
+    v0.9.2:
+    - En cada sesión, cada CSV se lee de Firestore/local solo una vez.
+    - Al cambiar de pestaña no vuelve a consultar Firebase continuamente.
+    - Si Firestore está vacío, migra desde el CSV local una sola vez.
+    - Nunca sube tablas vacías para no machacar datos.
+    """
+    cache = _session_df_cache()
+    if name in cache:
+        return _normalize_columns(cache[name], columns)
+
+    remote_df = read_firestore_df(name, columns)
+    if isinstance(remote_df, pd.DataFrame) and not remote_df.empty:
+        cache[name] = remote_df.copy()
+        memory_store()[name] = remote_df.copy()
+        try:
+            tmp = path(name + '.tmp')
+            remote_df.to_csv(tmp, index=False)
+            tmp.replace(path(name))
+        except Exception:
+            pass
+        return _normalize_columns(remote_df, columns)
+
+    local_df = _read_local_csv(name, columns)
+    if not local_df.empty:
+        cache[name] = local_df.copy()
+        memory_store()[name] = local_df.copy()
+        migrated_key = f"_firebase_seeded_{name}"
+        if name in FIRESTORE_FILES and not st.session_state.get(migrated_key):
+            write_firestore_df(name, local_df)
+            st.session_state[migrated_key] = True
+            st.session_state.setdefault("firebase_migrated_files", set()).add(name)
+        return _normalize_columns(local_df, columns)
 
     mem = memory_store().get(name)
     if isinstance(mem, pd.DataFrame) and not mem.empty:
-        mdf = mem.copy()
-        if columns:
-            for c in columns:
-                if c not in mdf:
-                    mdf[c] = None
-            mdf = mdf[columns]
-        write_firestore_df(name, mdf)
+        mdf = _normalize_columns(mem, columns)
+        cache[name] = mdf.copy()
         return mdf.copy()
 
-    return df.copy()
+    empty = pd.DataFrame(columns=columns or [])
+    cache[name] = empty.copy()
+    return empty.copy()
 
 def save_csv(name, df):
-    """Guarda en CSV local y, si está disponible, en Firestore."""
+    """Guarda en CSV local y en Firestore, actualizando caché sin releer todo."""
     DATA.mkdir(exist_ok=True)
     df = df.copy()
     tmp = path(name + '.tmp')
     final = path(name)
     df.to_csv(tmp, index=False)
     tmp.replace(final)
+    _session_df_cache()[name] = df.copy()
     memory_store()[name] = df.copy()
-    write_firestore_df(name, df)
+    ok = write_firestore_df(name, df)
+    if ok:
+        st.session_state["_last_firebase_save"] = datetime.now().strftime("%H:%M:%S")
 
 
 def build_ahorro_from_saldos():
@@ -1221,12 +1278,32 @@ def restore_backup(upload):
             base=Path(n).name
             if base in allowed or base.startswith(prefixes):
                 Path(base).write_bytes(z.read(n))
-    # Limpia caché en memoria para recargar desde ficheros restaurados.
+    # Limpia caché en memoria para recargar desde ficheros restaurados y sube CSV a Firestore.
     memory_store().clear()
+    try:
+        _read_firestore_df_cached.clear()
+    except Exception:
+        pass
+    for csv_name in FIRESTORE_FILES:
+        df_restore = _read_local_csv(csv_name)
+        if not df_restore.empty:
+            write_firestore_df(csv_name, df_restore)
 
 def render_backup():
     st.header('💾 Backup')
     st.markdown("<div class='backup-card'><b>Exporta todos los datos de Ahorro Mikel</b><br>Incluye saldos, bancos, iconos, nóminas, vacaciones, intereses, IRPF y configuración.</div>", unsafe_allow_html=True)
+    c_reload, c_status = st.columns([1, 3])
+    with c_reload:
+        if st.button('🔄 Recargar desde Firebase', use_container_width=True):
+            clear_data_cache()
+            st.success('Caché limpiada. Recargando datos...')
+            st.rerun()
+    with c_status:
+        last = st.session_state.get('_last_firebase_save')
+        if last:
+            st.caption(f'Último guardado Firebase en esta sesión: {last}')
+        else:
+            st.caption('Los datos se cargan una vez por sesión para que la app vaya más rápida.')
     st.download_button('📥 Descargar backup completo', data=create_backup_bytes(), file_name=f"Ahorro_Mikel_Backup_{date.today().isoformat()}.zip", mime='application/zip', use_container_width=True)
     st.divider()
     st.subheader('📤 Restaurar backup')
@@ -1302,7 +1379,13 @@ def render_dashboard():
     with c3:
         render_bank_distribution(df)
     render_monthly_cards(df)
-    st.download_button('⬇️ Descargar Excel actualizado', data=export_excel_bytes(), file_name='Ahorro_Mikel_actualizado.xlsx', use_container_width=False)
+    with st.expander('⬇️ Exportar Excel actualizado', expanded=False):
+        st.caption('Para que la app vaya más rápida, el Excel se prepara solo cuando lo pidas.')
+        if st.button('Preparar Excel actualizado', key='prepare_excel_dashboard'):
+            st.session_state['excel_export_bytes'] = export_excel_bytes()
+            st.success('Excel preparado')
+        if 'excel_export_bytes' in st.session_state:
+            st.download_button('Descargar Excel actualizado', data=st.session_state['excel_export_bytes'], file_name='Ahorro_Mikel_actualizado.xlsx', use_container_width=False)
 
 def render_ahorro():
     st.header('💰 Ahorro')
