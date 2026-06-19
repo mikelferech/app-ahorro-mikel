@@ -29,7 +29,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.9.3"
+APP_VERSION = "0.9.4"
 APP_UPDATED = "19/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -54,6 +54,8 @@ st.set_page_config(page_title=APP_TITLE, page_icon=get_page_icon(), layout="wide
 
 st.markdown("""
 <style>
+:root{--bank-black-readable:#FFFFFF;}
+@media (prefers-color-scheme: light){:root{--bank-black-readable:#111827;}}
 .main .block-container {padding-top: 1.4rem; max-width: 1780px; font-size: 1.05rem;}
 html, body, .stApp {font-size:16px!important;}
 label, input, textarea, button, [data-testid="stWidgetLabel"] {font-size:1.00rem!important;}
@@ -333,7 +335,7 @@ def bank_cell_text_color(k):
     color=bank_color(k)
     rgb=hex_to_rgb(color)
     if rgb == (0,0,0) or color.lower() in ['#000', '#000000']:
-        return '#FFFFFF'
+        return 'var(--bank-black-readable)'
     if color.lower() in ['#fff', '#ffffff']:
         return '#FFFFFF'
     if is_dark_color(color):
@@ -1930,7 +1932,7 @@ def render_intereses():
     render_bank_config('intereses_banks')
     df=load_intereses()
     year=st.selectbox('Año', list(range(date.today().year-2,date.today().year+9)), index=2, key='int_year')
-    ydf=load_intereses(); ydf=ydf[ydf['Anio']==year].copy()
+    ydf=df[df['Anio']==year].copy()
 
     if not ydf.empty:
         c=st.columns(3)
@@ -1938,73 +1940,96 @@ def render_intereses():
         c[1].metric('Retención anual', euro(ydf['Retencion'].sum()))
         c[2].metric('Neto anual', euro(ydf['NetoEsperado'].sum()))
 
-    with st.expander('➕ Añadir / actualizar interés', expanded=True):
-        top=st.columns([1,1])
-        mes=top[0].selectbox('Mes', MONTHS_ES, index=date.today().month-1, key='int_mes')
-        banco=top[1].selectbox('Banco', bank_keys(True), format_func=bank_name, key='int_banco')
-        ex=df[(df['Anio']==year)&(df['Mes']==mes)&(df['Banco']==banco)]
-        d=ex.iloc[0].to_dict() if not ex.empty else {}
-        clear_key = st.session_state.get('int_clear_key')
-        current_key = f'{year}_{mes}_{banco}'
-        default_bruto = 0.0 if clear_key == current_key else float(money(d.get('InteresBruto',0)))
-        default_ing = 0.0 if clear_key == current_key else float(money(d.get('Ingresado',0)))
-        if clear_key == current_key:
-            st.session_state.pop('int_clear_key', None)
-        c=st.columns([1,1,.9])
-        form_ver = st.session_state.get('int_form_ver', 0)
-        bruto_txt=c[0].text_input('Interés bruto', value=euro_input_text(default_bruto), key=f'int_bruto_txt_{year}_{mes}_{banco}_{form_ver}', help='Puedes usar coma decimal: 308,21')
-        bruto=money(bruto_txt)
-        ret=bruto*0.19
-        neto=bruto-ret
-        ingresado_txt=c[1].text_input('Ingresado', value=euro_input_text(default_ing), key=f'int_ingresado_txt_{year}_{mes}_{banco}_{form_ver}', help='Puedes usar coma decimal: 249,65')
-        ingresado=money(ingresado_txt)
-        c[2].markdown(f"<div class='interest-summary'><div class='is-row'><b>Retención 19%</b><span>{euro(ret)}</span></div><div class='is-row'><b>Neto esperado</b><span>{euro(neto)}</span></div></div>", unsafe_allow_html=True)
-        st.info(f'El bruto irá a Rendimiento neto capital mobiliario y la retención a Retenciones capital mobiliario en IRPF. Diferencia con ingreso: {euro(ingresado-neto)}')
-        if st.button('Guardar interés', use_container_width=True, key=f'int_save_{year}_{mes}_{banco}'):
-            row={'Anio':year,'Mes':mes,'Banco':banco,'InteresBruto':bruto,'Saldo':0.0,'Ingresado':ingresado}
-            base=df[~((df['Anio']==year)&(df['Mes']==mes)&(df['Banco']==banco))].copy()
-            save_intereses(pd.concat([base,pd.DataFrame([row])], ignore_index=True))
-            st.session_state['int_clear_key'] = f'{year}_{mes}_{banco}'
-            st.session_state['int_form_ver'] = st.session_state.get('int_form_ver', 0) + 1
-            st.success('Interés guardado')
-            st.rerun()
+    with st.expander('➕ Añadir / actualizar intereses', expanded=True):
+        st.caption('Puedes introducir uno o varios meses de golpe para el mismo banco. La retención se calcula automáticamente al 19%.')
+        with st.form(f'int_bulk_form_{year}'):
+            top=st.columns([1,2])
+            banco=top[0].selectbox('Banco', bank_keys(True), format_func=bank_name, key=f'int_bulk_banco_{year}')
+            meses=top[1].multiselect('Meses a introducir / actualizar', MONTHS_ES, default=[MONTHS_ES[date.today().month-1]], key=f'int_bulk_meses_{year}_{banco}')
+            rows=[]
+            for mes in meses:
+                ex=df[(df['Anio']==year)&(df['Mes']==mes)&(df['Banco']==banco)]
+                d=ex.iloc[0].to_dict() if not ex.empty else {}
+                rows.append({'Mes':mes,'InteresBruto':float(money(d.get('InteresBruto',0))),'Ingresado':float(money(d.get('Ingresado',0)))})
+            bulk=pd.DataFrame(rows, columns=['Mes','InteresBruto','Ingresado'])
+            edited_bulk=st.data_editor(
+                bulk,
+                hide_index=True,
+                use_container_width=True,
+                num_rows='fixed',
+                key=f'int_bulk_editor_{year}_{banco}_{"_".join(meses) if meses else "none"}',
+                column_config={
+                    'Mes': st.column_config.TextColumn('Mes', disabled=True, width='small'),
+                    'InteresBruto': st.column_config.NumberColumn('Interés bruto', format='%.2f', help='Ejemplo: 308,21'),
+                    'Ingresado': st.column_config.NumberColumn('Ingresado', format='%.2f', help='Neto ingresado en banco'),
+                }
+            )
+            st.info('El bruto irá a Rendimiento neto capital mobiliario y la retención a Retenciones capital mobiliario en IRPF.')
+            submitted=st.form_submit_button('💾 Guardar intereses seleccionados', use_container_width=True)
+        if submitted:
+            if not meses:
+                st.warning('Selecciona al menos un mes.')
+            else:
+                base=df[~((df['Anio']==year)&(df['Banco']==banco)&(df['Mes'].isin(meses)))].copy()
+                new_rows=[]
+                for _, rr in edited_bulk.iterrows():
+                    bruto=money(rr.get('InteresBruto',0))
+                    ingresado=money(rr.get('Ingresado',0))
+                    # Si ambos están a cero, no creamos registro nuevo. Si existía, queda eliminado.
+                    if abs(bruto) > 0.0001 or abs(ingresado) > 0.0001:
+                        new_rows.append({'Anio':year,'Mes':str(rr.get('Mes','')),'Banco':banco,'InteresBruto':bruto,'Saldo':0.0,'Ingresado':ingresado})
+                out=pd.concat([base,pd.DataFrame(new_rows)], ignore_index=True) if new_rows else base
+                save_intereses(out)
+                st.success('Intereses guardados en Firebase')
+                st.rerun()
 
-    ydf=load_intereses(); ydf=ydf[ydf['Anio']==year].copy()
+    ydf=df[df['Anio']==year].copy()
     if not ydf.empty:
         order={m:i for i,m in enumerate(MONTHS_ES)}
         ydf['_o']=ydf['Mes'].map(order).fillna(99); ydf=ydf.sort_values(['_o','Banco']).drop(columns=['_o'])
         st.subheader('Tabla de intereses')
+        bank_opts=[]
+        for k in bank_keys(True):
+            if k in set(ydf['Banco'].astype(str)):
+                bank_opts.append(k)
+        extra=[k for k in ydf['Banco'].astype(str).unique().tolist() if k not in bank_opts]
+        bank_opts += extra
+        filtro=st.selectbox('Filtrar por banco', ['Todos']+bank_opts, format_func=lambda k: 'Todos' if k=='Todos' else bank_name(k), key=f'int_filter_bank_{year}')
+        show=ydf if filtro=='Todos' else ydf[ydf['Banco'].astype(str)==str(filtro)].copy()
         html_tbl="<table class='irpf-table'><tr><th>Mes</th><th>Banco</th><th>Interés bruto</th><th>Retención 19%</th><th>Neto esperado</th><th>Ingresado</th><th>Diferencia</th></tr>"
-        for _,r in ydf.iterrows():
+        for _,r in show.iterrows():
             k=str(r.get('Banco',''))
-            btxt=bank_text_color(k)
+            row_col=bank_cell_text_color(k)
             bicon_white=True if is_dark_color(bank_color(k)) else False
-            bcell=f"<span class='bank-name-cell' style='color:{btxt}'>{bank_icon_html(k, white=bicon_white, size=20)}{html.escape(bank_name(k))}</span>"
+            bcell=f"<span class='bank-name-cell'>{bank_icon_html(k, white=bicon_white, size=20)}{html.escape(bank_name(k))}</span>"
             diff=money(r.get('Diferencia',0)); dcol='#22c55e' if diff>=0 else '#ef4444'
-            html_tbl += f"<tr><td>{html.escape(str(r.get('Mes','')))}</td><td>{bcell}</td><td class='irpf-num'>{euro(r.get('InteresBruto',0))}</td><td class='irpf-num'>{euro(r.get('Retencion',0))}</td><td class='irpf-num'>{euro(r.get('NetoEsperado',0))}</td><td class='irpf-num'>{euro(r.get('Ingresado',0))}</td><td class='irpf-num' style='color:{dcol};font-weight:900'>{euro(diff)}</td></tr>"
+            html_tbl += f"<tr style='color:{row_col};font-weight:850'><td>{html.escape(str(r.get('Mes','')))}</td><td>{bcell}</td><td class='irpf-num'>{euro(r.get('InteresBruto',0))}</td><td class='irpf-num'>{euro(r.get('Retencion',0))}</td><td class='irpf-num'>{euro(r.get('NetoEsperado',0))}</td><td class='irpf-num'>{euro(r.get('Ingresado',0))}</td><td class='irpf-num' style='color:{dcol};font-weight:950'>{euro(diff)}</td></tr>"
         html_tbl += "</table>"
         st.markdown(html_tbl, unsafe_allow_html=True)
 
         with st.expander('✏️ Editar / borrar intereses', expanded=False):
-            edit=ydf[['Mes','Banco','InteresBruto','Ingresado']].copy().reset_index(drop=True)
-            edited=st.data_editor(edit, hide_index=True, use_container_width=True, num_rows='fixed', key=f'int_edit_{year}', column_config={
+            edit=show[['Mes','Banco','InteresBruto','Ingresado']].copy().reset_index(drop=True)
+            edited=st.data_editor(edit, hide_index=True, use_container_width=True, num_rows='fixed', key=f'int_edit_{year}_{filtro}', column_config={
                 'Mes': st.column_config.SelectboxColumn('Mes', options=MONTHS_ES, width='small'),
-                'Banco': st.column_config.SelectboxColumn('Banco', options=bank_keys(True), width='medium'),
+                'Banco': st.column_config.SelectboxColumn('Banco', options=bank_keys(True), width='medium', format_func=bank_name),
                 'InteresBruto': st.column_config.NumberColumn('Interés bruto', format='%.2f'),
                 'Ingresado': st.column_config.NumberColumn('Ingresado', format='%.2f'),
             })
             c1,c2=st.columns(2)
-            if c1.button('💾 Guardar cambios de intereses', use_container_width=True, key=f'int_edit_save_{year}'):
-                base=df[df['Anio']!=year].copy()
+            if c1.button('💾 Guardar cambios de intereses', use_container_width=True, key=f'int_edit_save_{year}_{filtro}'):
+                if filtro=='Todos':
+                    base=df[df['Anio']!=year].copy()
+                else:
+                    base=df[~((df['Anio']==year)&(df['Banco'].astype(str)==str(filtro)))].copy()
                 edited['Anio']=year
                 edited['Saldo']=0.0
                 save_intereses(pd.concat([base, edited], ignore_index=True))
                 st.success('Intereses guardados')
                 st.rerun()
-            labels=(ydf['Mes']+' · '+ydf['Banco']).tolist()
-            sel=st.selectbox('Borrar registro', ['']+labels, key=f'int_del_sel_{year}')
-            if sel and c2.button('❌ Borrar interés seleccionado', use_container_width=True, key=f'int_del_btn_{year}'):
-                idx=labels.index(sel); todel=ydf.iloc[idx]
+            labels=(show['Mes']+' · '+show['Banco']).tolist()
+            sel=st.selectbox('Borrar registro', ['']+labels, key=f'int_del_sel_{year}_{filtro}')
+            if sel and c2.button('❌ Borrar interés seleccionado', use_container_width=True, key=f'int_del_btn_{year}_{filtro}'):
+                idx=labels.index(sel); todel=show.iloc[idx]
                 save_intereses(df[~((df['Anio']==todel.Anio)&(df['Mes']==todel.Mes)&(df['Banco']==todel.Banco))])
                 st.rerun()
 
