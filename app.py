@@ -1645,7 +1645,7 @@ def render_nominas():
     prog = min(100, max(0, used / VACACIONES_ANUALES * 100)) if VACACIONES_ANUALES else 0
     st.markdown(f"<div class='account-total'><b>🌴 Vacaciones {year}</b><br>Consumidas: <b>{used}</b> · Restantes: <b>{remaining}</b> · Disponibles: <b>{VACACIONES_ANUALES}</b><div style='height:10px;border-radius:999px;background:rgba(128,128,128,.22);margin-top:.55rem;overflow:hidden'><div style='height:100%;width:{prog:.1f}%;background:#00a2eb'></div></div></div>", unsafe_allow_html=True)
 
-    with st.expander('⚙️ Generar 12 nóminas del año', expanded=True):
+    with st.expander('⚙️ Generar 12 nóminas del año', expanded=False):
         st.caption('Rellena una plantilla mensual una vez y crea ENE-DIC. Después, cada mes solo introduces lo ingresado y la app comprueba si coincide.')
         c=st.columns(5)
         bruto_base=c[0].number_input('Bruto mensual', value=2166.67, step=.01, format='%.2f', key=f'nom_tpl_bruto_{year}')
@@ -1714,7 +1714,7 @@ def render_nominas():
         view=view[ordered_cols]
         st.markdown('<div class="desktop-payroll">'+payroll_html(view)+'</div>'+payroll_mobile_html(view), unsafe_allow_html=True)
 
-        with st.expander('✏️ Editar nóminas / introducir ingresado', expanded=True):
+        with st.expander('✏️ Editar nóminas / introducir ingresado', expanded=False):
             st.caption('La columna 💙 Ingresado es la que normalmente rellenarás cada mes. La app compara ese importe con Total / neto esperado y actualiza Estado y Diferencia al guardar.')
             # Editor de comprobación: además del ingresado mostramos el neto esperado/total
             # para que quede claro contra qué importe se compara cada nómina.
@@ -1851,16 +1851,25 @@ def render_vacaciones(year):
     st.metric('Días restantes', f"{VACACIONES_ANUALES-used:g}", delta=f"Usados: {used:g}")
 
     with st.expander('➕ Añadir vacaciones', expanded=False):
-        st.caption('El calendario anual de la app empieza en lunes. El selector emergente depende del navegador; validamos fechas y solapes al guardar.')
-        with st.form(f'vac_form_add_{year}', clear_on_submit=False):
-            cini, cfin = st.columns(2)
-            ini=cini.date_input('Inicio', value=date(year, date.today().month, 1), min_value=date(year,1,1), max_value=date(year,12,31), format='DD/MM/YYYY', key=f'vac_ini_{year}')
-            fin=cfin.date_input('Fin', value=date(year, date.today().month, 1), min_value=date(year,1,1), max_value=date(year,12,31), format='DD/MM/YYYY', key=f'vac_fin_{year}')
-            calc=laboral_days_between(ini, fin, year) if fin >= ini else 0
-            dias=st.number_input('Días computables', value=float(calc), step=.5, format='%.1f', help='Calculado automáticamente solo con laborables: excluye sábados, domingos y festivos. Puedes editarlo si hace falta.', key=f'vac_dias_{year}')
-            nota=st.text_input('Nota', key=f'vac_nota_{year}')
-            submitted = st.form_submit_button('Guardar vacaciones', use_container_width=True)
-        if submitted:
+        st.caption('El calendario anual de la app empieza en lunes. Al cambiar la fecha de inicio, la fecha fin se ajusta automáticamente si queda por debajo y los días se recalculan.')
+        # Fuera de formulario para que Inicio/Fin y días se actualicen al instante.
+        default_start=date(year, date.today().month, 1)
+        ini_key=f'vac_ini_{year}'
+        fin_key=f'vac_fin_{year}'
+        if ini_key not in st.session_state:
+            st.session_state[ini_key]=default_start
+        if fin_key not in st.session_state:
+            st.session_state[fin_key]=st.session_state[ini_key]
+        cini, cfin = st.columns(2)
+        ini=cini.date_input('Inicio', value=st.session_state[ini_key], min_value=date(year,1,1), max_value=date(year,12,31), format='DD/MM/YYYY', key=ini_key)
+        # Si al cambiar inicio la fecha fin queda antes, la subimos automáticamente a inicio.
+        if st.session_state.get(fin_key) is None or st.session_state[fin_key] < ini:
+            st.session_state[fin_key]=ini
+        fin=cfin.date_input('Fin', value=st.session_state[fin_key], min_value=ini, max_value=date(year,12,31), format='DD/MM/YYYY', key=fin_key)
+        calc=laboral_days_between(ini, fin, year) if fin >= ini else 0
+        dias=st.number_input('Días computables', value=float(calc), step=.5, format='%.1f', help='Calculado automáticamente solo con laborables: excluye sábados, domingos y festivos. Puedes editarlo si hace falta.', key=f'vac_dias_{year}')
+        nota=st.text_input('Nota', key=f'vac_nota_{year}')
+        if st.button('Guardar vacaciones', use_container_width=True, key=f'vac_save_{year}'):
             msg = vacation_overlap_message(vac, year, ini, fin)
             if msg:
                 st.error(msg)
