@@ -22,7 +22,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.8.15"
+APP_VERSION = "0.8.16"
 APP_UPDATED = "18/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -1537,9 +1537,12 @@ def render_nominas():
         st.markdown('<div class="desktop-payroll">'+payroll_html(view)+'</div>'+payroll_mobile_html(view), unsafe_allow_html=True)
 
         with st.expander('✏️ Editar nóminas / introducir ingresado', expanded=True):
-            st.caption('La columna 💙 Ingresado es la que normalmente rellenarás cada mes. El resto queda editable por si una nómina cambia.')
-            edit=ydf[['Mes','Bruto','SS','Desempleo','IRPF','Otros','Ingresado']].copy().reset_index(drop=True)
-            edit=edit.rename(columns={'Ingresado':'💙 Ingresado'})
+            st.caption('La columna 💙 Ingresado es la que normalmente rellenarás cada mes. La app compara ese importe con Total / neto esperado y actualiza Estado y Diferencia al guardar.')
+            # Editor de comprobación: además del ingresado mostramos el neto esperado/total
+            # para que quede claro contra qué importe se compara cada nómina.
+            edit=ydf[['Mes','Bruto','SS','Desempleo','IRPF','Otros','NetoCalculado','Ingresado','Diferencia']].copy().reset_index(drop=True)
+            edit['Estado']=edit['Diferencia'].apply(nomina_status)
+            edit=edit.rename(columns={'NetoCalculado':'Total / neto esperado','Ingresado':'💙 Ingresado','Diferencia':'Dif.'})
             st.markdown('<div class="compact-editor">', unsafe_allow_html=True)
             edited=st.data_editor(
                 edit,
@@ -1555,18 +1558,24 @@ def render_nominas():
                     'Desempleo': st.column_config.NumberColumn('Desempleo', format='%.2f', width='small'),
                     'IRPF': st.column_config.NumberColumn('IRPF', format='%.2f', width='small'),
                     'Otros': st.column_config.NumberColumn('Otros', format='%.2f', width='small'),
+                    'Total / neto esperado': st.column_config.NumberColumn('Total / neto esperado', format='%.2f', width='small', disabled=True, help='Importe calculado que debería coincidir con lo ingresado'),
                     '💙 Ingresado': st.column_config.NumberColumn('💙 Ingresado', format='%.2f', width='small', help='Importe real que te han ingresado en banco'),
-                }
+                    'Dif.': st.column_config.NumberColumn('Dif.', format='%.2f', width='small', disabled=True),
+                    'Estado': st.column_config.TextColumn('Estado', disabled=True, width='medium'),
+                },
+                disabled=['Mes','Total / neto esperado','Dif.','Estado']
             )
             st.markdown('</div>', unsafe_allow_html=True)
             if st.button('💾 Guardar cambios de nóminas', use_container_width=True, key=f'nom_save_editor_{year}'):
-                edited=edited.rename(columns={'💙 Ingresado':'Ingresado'})
+                edited=edited.rename(columns={'💙 Ingresado':'Ingresado','Total / neto esperado':'NetoCalculado','Dif.':'Diferencia'})
                 edited['Anio']=year
                 for col in ['Bruto','SS','Desempleo','IRPF','Otros','Ingresado']:
                     edited[col]=edited[col].apply(money)
-                base=df[df['Anio']!=year].copy()
+                base=load_nominas()
+                base=base[base['Anio']!=year].copy()
+                # Guardamos solo los campos editables; save_nominas recalcula NetoCalculado y Diferencia.
                 save_nominas(pd.concat([base,edited[['Anio','Mes','Bruto','SS','Desempleo','IRPF','Otros','Ingresado']]], ignore_index=True))
-                st.success('Nóminas actualizadas.')
+                st.success('Nóminas actualizadas y comprobación recalculada.')
                 st.rerun()
 
     render_vacaciones(year)
