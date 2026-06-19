@@ -331,15 +331,16 @@ def bank_text_color(k):
 
 def bank_cell_text_color(k):
     # Para tablas en modo oscuro: mantener el color corporativo, pero hacerlo legible.
-    # Negro/Revolut -> blanco; colores muy oscuros -> versión aclarada del color; blanco -> blanco.
-    color=bank_color(k)
-    rgb=hex_to_rgb(color)
-    if rgb == (0,0,0) or color.lower() in ['#000', '#000000']:
-        return 'var(--bank-black-readable)'
+    # Negro/Revolut y colores casi negros -> blanco directo (evita que quede invisible).
+    color=str(bank_color(k) or '#6b7280').strip()
+    r,g,b=hex_to_rgb(color)
+    lum=(0.299*r + 0.587*g + 0.114*b)
+    if color.lower() in ['#000', '#000000'] or lum < 55:
+        return '#FFFFFF'
     if color.lower() in ['#fff', '#ffffff']:
         return '#FFFFFF'
-    if is_dark_color(color):
-        return lighten_hex(color, .55)
+    if lum < 140:
+        return lighten_hex(color, .58)
     return color
 
 def rerun(): st.rerun()
@@ -1867,7 +1868,14 @@ def render_vacaciones(year):
             st.session_state[fin_key]=ini
         fin=cfin.date_input('Fin', value=st.session_state[fin_key], min_value=ini, max_value=date(year,12,31), format='DD/MM/YYYY', key=fin_key)
         calc=laboral_days_between(ini, fin, year) if fin >= ini else 0
-        dias=st.number_input('Días computables', value=float(calc), step=.5, format='%.1f', help='Calculado automáticamente solo con laborables: excluye sábados, domingos y festivos. Puedes editarlo si hace falta.', key=f'vac_dias_{year}')
+        dias_key=f'vac_dias_{year}'
+        dates_key=f'vac_dates_key_{year}'
+        current_dates=(ini.isoformat(), fin.isoformat())
+        if st.session_state.get(dates_key) != current_dates:
+            st.session_state[dates_key]=current_dates
+            st.session_state[dias_key]=float(calc)
+        dias=st.number_input('Días computables', value=float(st.session_state.get(dias_key, calc)), step=.5, format='%.1f', help='Calculado automáticamente solo con laborables: excluye sábados, domingos y festivos. Puedes editarlo si hace falta.', key=dias_key)
+        st.caption(f'Días calculados automáticamente: {calc:g}')
         nota=st.text_input('Nota', key=f'vac_nota_{year}')
         if st.button('Guardar vacaciones', use_container_width=True, key=f'vac_save_{year}'):
             msg = vacation_overlap_message(vac, year, ini, fin)
@@ -2013,6 +2021,23 @@ def render_intereses():
             bcell=f"<span class='bank-name-cell'>{bank_icon_html(k, white=bicon_white, size=20)}{html.escape(bank_name(k))}</span>"
             diff=money(r.get('Diferencia',0)); dcol='#22c55e' if diff>=0 else '#ef4444'
             html_tbl += f"<tr style='color:{row_col};font-weight:850'><td>{html.escape(str(r.get('Mes','')))}</td><td>{bcell}</td><td class='irpf-num'>{euro(r.get('InteresBruto',0))}</td><td class='irpf-num'>{euro(r.get('Retencion',0))}</td><td class='irpf-num'>{euro(r.get('NetoEsperado',0))}</td><td class='irpf-num'>{euro(r.get('Ingresado',0))}</td><td class='irpf-num' style='color:{dcol};font-weight:950'>{euro(diff)}</td></tr>"
+        if not show.empty:
+            s_bruto=show['InteresBruto'].apply(money).sum()
+            s_ret=show['Retencion'].apply(money).sum()
+            s_neto=show['NetoEsperado'].apply(money).sum()
+            s_ing=show['Ingresado'].apply(money).sum()
+            s_diff=show['Diferencia'].apply(money).sum()
+            s_dcol='#22c55e' if s_diff>=0 else '#ef4444'
+            html_tbl += (
+                "<tr style='font-weight:950;background:rgba(0,162,235,.10);border-top:2px solid rgba(0,162,235,.65)'>"
+                "<td colspan='2'>TOTAL FILTRADO</td>"
+                f"<td class='irpf-num'>{euro(s_bruto)}</td>"
+                f"<td class='irpf-num'>{euro(s_ret)}</td>"
+                f"<td class='irpf-num'>{euro(s_neto)}</td>"
+                f"<td class='irpf-num'>{euro(s_ing)}</td>"
+                f"<td class='irpf-num' style='color:{s_dcol};font-weight:950'>{euro(s_diff)}</td>"
+                "</tr>"
+            )
         html_tbl += "</table>"
         st.markdown(html_tbl, unsafe_allow_html=True)
 
