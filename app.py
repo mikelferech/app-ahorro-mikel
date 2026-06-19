@@ -13,6 +13,13 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore
+except Exception:
+    firebase_admin = None
+    credentials = None
+    firestore = None
+try:
     from streamlit_js_eval import streamlit_js_eval
 except Exception:
     streamlit_js_eval = None
@@ -22,8 +29,8 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.8.16"
-APP_UPDATED = "18/06/2026"
+APP_VERSION = "0.9.0"
+APP_UPDATED = "19/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
 MFE_LOGO = Path("mfe_cabecera.png")
@@ -344,6 +351,117 @@ def cookie_manager_resource():
     except Exception:
         return None
 
+
+# ---------- Firebase / Firestore persistence ----------
+# Estructura prevista en Firebase:
+# presupuestos / ahorro-mikel / data / <nombre_csv_sin_punto>
+FIREBASE_COLLECTION = "presupuestos"
+FIREBASE_DOC = "ahorro-mikel"
+FIRESTORE_FILES = {
+    "ahorro.csv",
+    "bancos.csv",
+    "nominas.csv",
+    "vacaciones.csv",
+    "intereses.csv",
+    "irpf_overrides.csv",
+    "empresa_config.csv",
+}
+
+@st.cache_resource
+def firestore_client_resource():
+    """Devuelve cliente Firestore si está configurado en Streamlit Secrets.
+
+    En Secrets se espera dentro de [auth] una clave firebase_key con el JSON completo.
+    Si falta firebase-admin en requirements o la clave no existe, la app sigue funcionando con CSV.
+    """
+    if firebase_admin is None or credentials is None or firestore is None:
+        return None
+    raw = ""
+    try:
+        raw = st.secrets.get("auth", {}).get("firebase_key", "")
+    except Exception:
+        raw = ""
+    if not raw:
+        return None
+    try:
+        info = json.loads(str(raw))
+        app_name = "ahorro_mikel_firestore"
+        try:
+            app = firebase_admin.get_app(app_name)
+        except Exception:
+            app = firebase_admin.initialize_app(credentials.Certificate(info), name=app_name)
+        return firestore.client(app=app)
+    except Exception as e:
+        st.session_state["firebase_error"] = str(e)
+        return None
+
+def firebase_enabled():
+    return firestore_client_resource() is not None
+
+def _firestore_doc_id(name):
+    return str(name).replace(".", "_").replace("/", "_")
+
+def _firestore_doc_ref(name):
+    db = firestore_client_resource()
+    if db is None:
+        return None
+    return db.collection(FIREBASE_COLLECTION).document(FIREBASE_DOC).collection("data").document(_firestore_doc_id(name))
+
+def _df_to_records(df):
+    try:
+        return json.loads(df.to_json(orient="records", date_format="iso", force_ascii=False))
+    except Exception:
+        safe = df.copy()
+        for c in safe.columns:
+            safe[c] = safe[c].astype(str)
+        return json.loads(safe.to_json(orient="records", force_ascii=False))
+
+def read_firestore_df(name, columns=None):
+    """Lee DataFrame desde Firestore. Devuelve None si el documento todavía no existe."""
+    if name not in FIRESTORE_FILES:
+        return None
+    ref = _firestore_doc_ref(name)
+    if ref is None:
+        return None
+    try:
+        snap = ref.get()
+        if not snap.exists:
+            return None
+        payload = snap.to_dict() or {}
+        rows = payload.get("rows", [])
+        stored_cols = payload.get("columns", [])
+        df = pd.DataFrame(rows)
+        wanted = columns or stored_cols
+        if wanted:
+            for c in wanted:
+                if c not in df:
+                    df[c] = None
+            df = df[wanted]
+        return df
+    except Exception as e:
+        st.session_state["firebase_error"] = str(e)
+        return None
+
+def write_firestore_df(name, df):
+    if name not in FIRESTORE_FILES:
+        return False
+    ref = _firestore_doc_ref(name)
+    if ref is None:
+        return False
+    try:
+        payload = {
+            "name": name,
+            "columns": list(df.columns),
+            "rows": _df_to_records(df),
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+            "appVersion": APP_VERSION,
+        }
+        ref.set(payload)
+        return True
+    except Exception as e:
+        st.session_state["firebase_error"] = str(e)
+        return False
+
 BROWSER_BACKUP_FILES = {"nominas.csv", "vacaciones.csv", "intereses.csv", "empresa_config.csv", "bancos.csv"}
 
 # ---------- browser/local persistence ----------
@@ -389,16 +507,26 @@ def write_browser_df(name, df):
 def path(name): DATA.mkdir(exist_ok=True); return DATA/name
 
 def read_csv(name, columns=None):
-    """Lee datos de forma estable.
+    """Lee datos con prioridad Firebase.
 
-    Cambio v0.7.0:
-    - Primero lee SIEMPRE el CSV real del servidor.
-    - Solo usa memoria/localStorage si el CSV está vacío.
-    - Esto evita que una copia vacía del navegador o de memoria tape los datos ya guardados.
+    v0.9.0:
+    - Si Firestore tiene documento para este CSV, es la fuente principal.
+    - Si Firestore aún no existe, usa CSV local y lo sube a Firestore como semilla.
+    - Mantiene fallback local para que la app no se rompa si Firebase no está configurado.
     """
+    remote_df = read_firestore_df(name, columns)
+    if isinstance(remote_df, pd.DataFrame):
+        memory_store()[name] = remote_df.copy()
+        try:
+            tmp = path(name + '.tmp')
+            remote_df.to_csv(tmp, index=False)
+            tmp.replace(path(name))
+        except Exception:
+            pass
+        return remote_df.copy()
+
     p = path(name)
     df = pd.DataFrame(columns=columns or [])
-
     if p.exists():
         try:
             df = pd.read_csv(p)
@@ -411,43 +539,11 @@ def read_csv(name, columns=None):
                 df[c] = None
         df = df[columns]
 
-    # Si hay CSV con datos, normalmente es la fuente principal. Pero tras un redeploy
-    # Streamlit Cloud puede volver al CSV del repositorio y tapar cambios hechos desde la app
-    # (bancos nuevos, logo de empresa). Si el navegador tiene una copia más rica, la priorizamos
-    # y rehidratamos el CSV del servidor.
     if not df.empty:
-        if name in BROWSER_BACKUP_FILES:
-            try:
-                browser_df = read_browser_df(name, columns)
-                use_browser = False
-                if isinstance(browser_df, pd.DataFrame) and not browser_df.empty:
-                    if name == 'empresa_config.csv':
-                        csv_b64 = ''
-                        br_b64 = ''
-                        if 'LogoBase64' in df.columns:
-                            csv_b64 = str(df.iloc[0].get('LogoBase64') or '')
-                        if 'LogoBase64' in browser_df.columns:
-                            br_b64 = str(browser_df.iloc[0].get('LogoBase64') or '')
-                        use_browser = bool(br_b64 and br_b64.lower() not in ('nan','none') and (not csv_b64 or csv_b64.lower() in ('nan','none')))
-                    elif name == 'bancos.csv':
-                        use_browser = len(browser_df) > len(df)
-                    else:
-                        use_browser = len(browser_df) >= len(df) and len(browser_df) > 0
-                if use_browser:
-                    df = browser_df.copy()
-                    try:
-                        tmp = path(name + '.tmp')
-                        df.to_csv(tmp, index=False)
-                        tmp.replace(path(name))
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            write_browser_df(name, df)
         memory_store()[name] = df.copy()
+        write_firestore_df(name, df)
         return df.copy()
 
-    # Si el CSV está vacío, probamos memoria del servidor.
     mem = memory_store().get(name)
     if isinstance(mem, pd.DataFrame) and not mem.empty:
         mdf = mem.copy()
@@ -456,25 +552,13 @@ def read_csv(name, columns=None):
                 if c not in mdf:
                     mdf[c] = None
             mdf = mdf[columns]
+        write_firestore_df(name, mdf)
         return mdf.copy()
-
-    # Último recurso: copia del navegador.
-    if name in BROWSER_BACKUP_FILES:
-        browser_df = read_browser_df(name, columns)
-        if isinstance(browser_df, pd.DataFrame) and not browser_df.empty:
-            memory_store()[name] = browser_df.copy()
-            # Rehidrata el CSV del servidor para siguientes cargas/exportación.
-            try:
-                tmp = path(name + '.tmp')
-                browser_df.to_csv(tmp, index=False)
-                tmp.replace(path(name))
-            except Exception:
-                pass
-            return browser_df.copy()
 
     return df.copy()
 
 def save_csv(name, df):
+    """Guarda en CSV local y, si está disponible, en Firestore."""
     DATA.mkdir(exist_ok=True)
     df = df.copy()
     tmp = path(name + '.tmp')
@@ -482,8 +566,8 @@ def save_csv(name, df):
     df.to_csv(tmp, index=False)
     tmp.replace(final)
     memory_store()[name] = df.copy()
-    if name in BROWSER_BACKUP_FILES:
-        write_browser_df(name, df)
+    write_firestore_df(name, df)
+
 
 def build_ahorro_from_saldos():
     """Carga el histórico bueno desde saldos.xlsx si el CSV no existe o está vacío."""
