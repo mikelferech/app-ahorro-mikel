@@ -29,8 +29,8 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.9.4"
-APP_UPDATED = "19/06/2026"
+APP_VERSION = "0.9.7"
+APP_UPDATED = "20/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
 MFE_LOGO = Path("mfe_cabecera.png")
@@ -1839,7 +1839,53 @@ def render_calendar(y, vac_days=set()):
                 st.markdown(calendar_month_html(y, m, vac_days, fest), unsafe_allow_html=True)
                 m += 1
 
+
+def inject_monday_datepicker_fix():
+    """Forzar el selector emergente de fechas de Streamlit a mostrar semanas L-D.
+    Streamlit no expone un parámetro oficial para el primer día de semana en st.date_input;
+    este pequeño parche solo reordena visualmente el calendario emergente cuando aparece.
+    """
+    components.html("""
+<script>
+(function(){
+  function text(el){ return (el && el.textContent || '').trim(); }
+  function patchOne(root){
+    try{
+      if(!root || root.dataset.mfeMondayPatched === '1') return;
+      const all = Array.from(root.querySelectorAll('div, span'));
+      const dayNames = ['Su','Mo','Tu','We','Th','Fr','Sa','Do','Lu','Ma','Mi','Ju','Vi','Sá','Sa'];
+      const headers = all.filter(el => dayNames.includes(text(el)) && el.offsetParent !== null).slice(0,7);
+      if(headers.length === 7){
+        ['Lu','Ma','Mi','Ju','Vi','Sa','Do'].forEach((v,i)=>{ headers[i].textContent = v; });
+      }
+      const grid = root.querySelector('[role="grid"]') || root;
+      const rows = Array.from(grid.querySelectorAll('[role="row"]')).filter(r => r.querySelector('[role="gridcell"]'));
+      const cells = rows.flatMap(r => Array.from(r.querySelectorAll('[role="gridcell"]')));
+      if(cells.length >= 28 && cells.length % 7 === 0){
+        const shifted = cells.slice(1).concat(cells[0]);
+        let k = 0;
+        rows.forEach(row => {
+          for(let i=0;i<7 && k<shifted.length;i++,k++) row.appendChild(shifted[k]);
+        });
+      }
+      root.dataset.mfeMondayPatched = '1';
+    }catch(e){}
+  }
+  function patch(){
+    const d = window.parent.document;
+    const candidates = Array.from(d.querySelectorAll('[data-baseweb="calendar"], [role="dialog"], [data-baseweb="popover"], [data-baseweb="popover-body"]'));
+    candidates.forEach(patchOne);
+  }
+  patch();
+  const observer = new MutationObserver(function(){ patch(); });
+  observer.observe(window.parent.document.body, {childList:true, subtree:true});
+})();
+</script>
+""", height=0, width=0)
+
+
 def render_vacaciones(year):
+    inject_monday_datepicker_fix()
     st.subheader('🌴 Vacaciones y calendario laboral')
     vac=load_vacaciones()
     if not vac.empty:
