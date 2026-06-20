@@ -29,7 +29,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.10.2"
+APP_VERSION = "0.10.3"
 APP_UPDATED = "20/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -235,17 +235,25 @@ input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb=
 .irpf-block-title{background:#c3005e!important;border-bottom:2px solid #c3005e!important;}
 
 
-/* v0.9.9: tabla intereses responsive en móvil */
+/* v0.10.3: intereses rápido + vista móvil compacta */
+.interest-desktop{display:block;}
+.interest-mobile{display:none;}
 .interest-table-wrap{width:100%;overflow-x:auto;border:1px solid rgba(148,163,184,.18);border-radius:10px;}
 .interest-table{min-width:860px;}
 .interest-table .bank-col{min-width:145px;max-width:170px;}
 .interest-table .bank-name-cell{white-space:nowrap;}
+.interest-card{border:1px solid rgba(148,163,184,.22);border-radius:14px;padding:.75rem .85rem;margin:.55rem 0;background:rgba(15,23,42,.34);}
+.interest-card-head{display:flex;justify-content:space-between;align-items:center;gap:.8rem;font-weight:950;margin-bottom:.45rem;}
+.interest-card-bank{display:inline-flex;align-items:center;gap:.35rem;min-width:0;}
+.interest-card-grid{display:grid;grid-template-columns:1fr 1fr;gap:.35rem .75rem;font-size:.95rem;}
+.interest-card-grid .label{opacity:.72;font-weight:750;}
+.interest-card-grid .num{text-align:right;font-weight:900;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.interest-total-card{border-color:rgba(0,162,235,.65);background:rgba(0,162,235,.10);font-weight:950;}
 @media (max-width:760px){
-  .interest-table{min-width:740px;font-size:.88rem!important;}
-  .interest-table th,.interest-table td{padding:5px 6px!important;}
-  .interest-table .bank-col{min-width:132px;max-width:145px;}
-  .interest-table .bank-name-cell{gap:.18rem;font-size:.92rem;}
-  .interest-table .bank-icon{height:.95em!important;width:.95em!important;margin-right:.18em!important;}
+  .interest-desktop{display:none!important;}
+  .interest-mobile{display:block!important;}
+  .interest-card-grid{font-size:.92rem;}
+  .interest-card .bank-icon{height:1.05em!important;width:1.05em!important;margin-right:.15em!important;}
 }
 
 /* v0.8.15: hueco Dashboard corregido eliminando iframes de localStorage; sin CSS agresivo sobre pestañas. */
@@ -2246,6 +2254,43 @@ def render_vacaciones(year):
             allf=read_csv('festivos.csv', ['Anio','Fecha','Nombre','Activo']); allf=allf[pd.to_numeric(allf['Anio'], errors='coerce')!=year]
             save_csv('festivos.csv', pd.concat([allf,edited], ignore_index=True)); st.rerun()
 
+
+def intereses_mobile_html(show):
+    """Vista compacta para móvil: evita la tabla ancha y reduce trabajo de renderizado."""
+    if show is None or show.empty:
+        return "<div class='interest-mobile'><div class='interest-card'>Sin intereses para mostrar.</div></div>"
+    out = "<div class='interest-mobile'>"
+    for _, r in show.iterrows():
+        k = str(r.get('Banco',''))
+        col = bank_cell_text_color(k)
+        icon = bank_icon_html(k, white=True if is_dark_color(bank_color(k)) else False, size=18)
+        diff = money(r.get('Diferencia',0))
+        dcol = '#22c55e' if diff >= 0 else '#ef4444'
+        out += "<div class='interest-card'>"
+        out += f"<div class='interest-card-head' style='color:{col}'><span>{html.escape(str(r.get('Mes','')))}</span><span class='interest-card-bank'>{icon}{html.escape(bank_name(k))}</span></div>"
+        out += "<div class='interest-card-grid'>"
+        for label, val, css in [
+            ('Bruto', euro(r.get('InteresBruto',0)), ''),
+            ('Retención', euro(r.get('Retencion',0)), ''),
+            ('Neto', euro(r.get('NetoEsperado',0)), ''),
+            ('Ingresado', euro(r.get('Ingresado',0)), ''),
+        ]:
+            out += f"<div class='label'>{label}</div><div class='num' style='color:{col}'>{val}</div>"
+        out += f"<div class='label'>Diferencia</div><div class='num' style='color:{dcol}'>{euro(diff)}</div>"
+        out += "</div></div>"
+    s_bruto=show['InteresBruto'].apply(money).sum() if 'InteresBruto' in show else 0
+    s_ret=show['Retencion'].apply(money).sum() if 'Retencion' in show else 0
+    s_neto=show['NetoEsperado'].apply(money).sum() if 'NetoEsperado' in show else 0
+    s_ing=show['Ingresado'].apply(money).sum() if 'Ingresado' in show else 0
+    s_diff=show['Diferencia'].apply(money).sum() if 'Diferencia' in show else 0
+    dcol = '#22c55e' if s_diff >= 0 else '#ef4444'
+    out += "<div class='interest-card interest-total-card'><div class='interest-card-head'><span>TOTAL FILTRADO</span></div><div class='interest-card-grid'>"
+    for label, val, color in [('Bruto',euro(s_bruto),''),('Retención',euro(s_ret),''),('Neto',euro(s_neto),''),('Ingresado',euro(s_ing),''),('Diferencia',euro(s_diff),dcol)]:
+        style = f" style='color:{color}'" if color else ""
+        out += f"<div class='label'>{label}</div><div class='num'{style}>{val}</div>"
+    out += "</div></div></div>"
+    return out
+
 def render_intereses():
     st.header('🏦 Intereses')
     render_bank_config('intereses_banks')
@@ -2315,7 +2360,7 @@ def render_intereses():
         bank_opts += extra
         filtro=st.selectbox('Filtrar por banco', ['Todos']+bank_opts, format_func=lambda k: 'Todos' if k=='Todos' else bank_name(k), key=f'int_filter_bank_{year}')
         show=ydf if filtro=='Todos' else ydf[ydf['Banco'].astype(str)==str(filtro)].copy()
-        html_tbl="<div class='interest-table-wrap'><table class='irpf-table interest-table'><tr><th>Mes</th><th class='bank-col'>Banco</th><th>Interés bruto</th><th>Retención 19%</th><th>Neto esperado</th><th>Ingresado</th><th>Diferencia</th></tr>"
+        html_tbl="<div class='interest-desktop'><div class='interest-table-wrap'><table class='irpf-table interest-table'><tr><th>Mes</th><th class='bank-col'>Banco</th><th>Interés bruto</th><th>Retención 19%</th><th>Neto esperado</th><th>Ingresado</th><th>Diferencia</th></tr>"
         for _,r in show.iterrows():
             k=str(r.get('Banco',''))
             row_col=bank_cell_text_color(k)
@@ -2340,8 +2385,8 @@ def render_intereses():
                 f"<td class='irpf-num' style='color:{s_dcol};font-weight:950'>{euro(s_diff)}</td>"
                 "</tr>"
             )
-        html_tbl += "</table></div>"
-        st.markdown(html_tbl, unsafe_allow_html=True)
+        html_tbl += "</table></div></div>"
+        st.markdown(html_tbl + intereses_mobile_html(show), unsafe_allow_html=True)
 
         with st.expander('✏️ Editar / borrar intereses', expanded=False):
             edit=show[['Mes','Banco','InteresBruto','Ingresado']].copy().reset_index(drop=True)
