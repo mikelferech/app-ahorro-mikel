@@ -29,7 +29,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.9.9"
+APP_VERSION = "0.10.0"
 APP_UPDATED = "20/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -570,34 +570,171 @@ def write_firestore_df(name, df):
 BROWSER_BACKUP_FILES = {"nominas.csv", "vacaciones.csv", "intereses.csv", "empresa_config.csv", "bancos.csv"}
 
 
-# Preparación migración Firestore real v0.9.9
+# ---------- Firestore real collections v0.10.0 ----------
+# Ruta estable:
+# presupuestos / ahorro-mikel / <coleccion> / <documento_registro>
+# Se mantiene compatibilidad con los documentos antiguos data/*_csv para migrar una sola vez.
 FIRESTORE_REAL_COLLECTIONS = {
+    "ahorro.csv": "ahorro",
+    "bancos.csv": "bancos",
     "nominas.csv": "nominas",
     "vacaciones.csv": "vacaciones",
     "intereses.csv": "intereses",
-    "ahorro.csv": "ahorro",
-    "bancos.csv": "bancos",
+    "irpf_overrides.csv": "irpf_overrides",
+    "empresa_config.csv": "empresa_config",
 }
 
 def firestore_real_collection_ref(csv_name):
-    """Referencia prevista para el siguiente paso: colecciones reales por registro.
-    Aún no sustituye la lectura principal; deja preparada la ruta estable.
-    """
     db = firestore_client_resource()
     coll = FIRESTORE_REAL_COLLECTIONS.get(csv_name)
     if db is None or not coll:
         return None
     return db.collection(FIREBASE_COLLECTION).document(FIREBASE_DOC).collection(coll)
 
+def firestore_real_meta_ref():
+    db = firestore_client_resource()
+    if db is None:
+        return None
+    return db.collection(FIREBASE_COLLECTION).document(FIREBASE_DOC).collection("_meta").document("migracion")
+
 def firestore_record_id(row, idx=0):
     parts=[]
     for k in ["Anio","Fecha","Mes","Banco","Inicio","Fin","Clave","Nombre"]:
-        if k in row and str(row.get(k,'')).strip() not in ('','nan','None'):
+        if k in row and str(row.get(k,'')).strip() not in ('','nan','None','NaT'):
             parts.append(str(row.get(k)).strip())
     base='__'.join(parts) if parts else f'registro_{idx:05d}'
-    return safe_key(base)[:120]
+    try:
+        return safe_key(base)[:120]
+    except Exception:
+        return re.sub(r'[^A-Za-z0-9_-]+','_',base)[:120]
+
+def _record_to_firestore_dict(row):
+    out = {}
+    for k, v in dict(row).items():
+        try:
+            if pd.isna(v):
+                out[str(k)] = None
+            elif isinstance(v, (pd.Timestamp, datetime)):
+                out[str(k)] = v.isoformat()
+            elif isinstance(v, date):
+                out[str(k)] = v.isoformat()
+            else:
+                # Firestore acepta int/float/bool/str sin problema; normalizamos numpy con json.
+                out[str(k)] = json.loads(json.dumps(v, default=str, ensure_ascii=False))
+        except Exception:
+            out[str(k)] = str(v)
+    return out
+
+def _collection_count_quick(ref, limit=1):
+    if ref is None:
+        return 0
+    try:
+        return len(list(ref.limit(limit).stream()))
+    except Exception:
+        return 0
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _read_firestore_collection_cached(csv_name, columns_tuple=()):
+    if csv_name not in FIRESTORE_REAL_COLLECTIONS:
+        return False, [], None
+    ref = firestore_real_collection_ref(csv_name)
+    if ref is None:
+        return False, [], None
+    try:
+        rows=[]
+        for doc in ref.stream():
+            d = doc.to_dict() or {}
+            if doc.id.startswith("__"):
+                continue
+            d.pop("_doc_id", None)
+            d.pop("updatedAt", None)
+            rows.append(d)
+        return True, rows, None
+    except Exception as e:
+        return False, [], str(e)
+
+def read_firestore_collection_df(csv_name, columns=None):
+    exists, rows, err = _read_firestore_collection_cached(csv_name, tuple(columns or ()))
+    if err:
+        st.session_state["firebase_error"] = err
+        return None
+    if not exists or not rows:
+        return None
+    df = pd.DataFrame(rows)
+    wanted = columns or list(df.columns)
+    if wanted:
+        for c in wanted:
+            if c not in df:
+                df[c] = None
+        df = df[wanted]
+    return df
+
+def write_firestore_collection_df(csv_name, df):
+    ref = firestore_real_collection_ref(csv_name)
+    if ref is None:
+        return False
+    try:
+        # Para tus volúmenes, reescritura segura completa de la colección.
+        # Evita duplicados al editar/borrar filas.
+        docs = list(ref.stream())
+        batch = ref._client.batch()
+        ops = 0
+        for doc in docs:
+            batch.delete(doc.reference)
+            ops += 1
+            if ops >= 450:
+                batch.commit(); batch = ref._client.batch(); ops = 0
+        for idx, row in df.reset_index(drop=True).iterrows():
+            data = _record_to_firestore_dict(row.to_dict())
+            data["updatedAt"] = firestore.SERVER_TIMESTAMP
+            doc_id = firestore_record_id(data, idx)
+            # Si dos filas generan mismo id, hacemos id único.
+            if idx:
+                doc_id = f"{doc_id}__{idx:04d}"[:150]
+            batch.set(ref.document(doc_id), data)
+            ops += 1
+            if ops >= 450:
+                batch.commit(); batch = ref._client.batch(); ops = 0
+        if ops:
+            batch.commit()
+        try:
+            _read_firestore_collection_cached.clear()
+        except Exception:
+            pass
+        return True
+    except Exception as e:
+        st.session_state["firebase_error"] = str(e)
+        return False
+
+def migrate_csv_docs_to_real_collections():
+    """Migra una vez desde data/*_csv o CSV local a colecciones reales.
+    No borra los documentos antiguos: quedan como respaldo.
+    """
+    if not firebase_enabled():
+        return
+    key = "_firestore_real_migration_checked"
+    if st.session_state.get(key):
+        return
+    st.session_state[key] = True
+    migrated=[]
+    for csv_name, coll in FIRESTORE_REAL_COLLECTIONS.items():
+        ref = firestore_real_collection_ref(csv_name)
+        if ref is None:
+            continue
+        if _collection_count_quick(ref, 1) > 0:
+            continue
+        # Primero intentamos documento antiguo data/<csv>_csv.
+        old_df = read_firestore_df(csv_name, None)
+        if old_df is None or old_df.empty:
+            old_df = _read_local_csv(csv_name, None)
+        if isinstance(old_df, pd.DataFrame) and not old_df.empty:
+            if write_firestore_collection_df(csv_name, old_df):
+                migrated.append(csv_name)
+    if migrated:
+        st.session_state["firestore_real_migrated"] = migrated
 
 # ---------- browser/local persistence ----------
+
 def _df_to_json_payload(df):
     try:
         d = df.copy()
@@ -686,10 +823,27 @@ def read_csv(name, columns=None):
     if name in cache:
         return _normalize_columns(cache[name], columns)
 
+    # v0.10.0: primero colecciones Firestore reales.
+    remote_real_df = read_firestore_collection_df(name, columns)
+    if isinstance(remote_real_df, pd.DataFrame) and not remote_real_df.empty:
+        cache[name] = remote_real_df.copy()
+        memory_store()[name] = remote_real_df.copy()
+        try:
+            tmp = path(name + '.tmp')
+            remote_real_df.to_csv(tmp, index=False)
+            tmp.replace(path(name))
+        except Exception:
+            pass
+        return _normalize_columns(remote_real_df, columns)
+
+    # Compatibilidad: documentos antiguos data/*_csv.
     remote_df = read_firestore_df(name, columns)
     if isinstance(remote_df, pd.DataFrame) and not remote_df.empty:
         cache[name] = remote_df.copy()
         memory_store()[name] = remote_df.copy()
+        # Sembrar colección real para acelerar siguientes sesiones.
+        if name in FIRESTORE_REAL_COLLECTIONS:
+            write_firestore_collection_df(name, remote_df)
         try:
             tmp = path(name + '.tmp')
             remote_df.to_csv(tmp, index=False)
@@ -729,8 +883,9 @@ def save_csv(name, df):
     tmp.replace(final)
     _session_df_cache()[name] = df.copy()
     memory_store()[name] = df.copy()
-    ok = write_firestore_df(name, df)
-    if ok:
+    ok_real = write_firestore_collection_df(name, df) if name in FIRESTORE_REAL_COLLECTIONS else False
+    ok_legacy = write_firestore_df(name, df)
+    if ok_real or ok_legacy:
         st.session_state["_last_firebase_save"] = datetime.now().strftime("%H:%M:%S")
 
 
@@ -2229,7 +2384,7 @@ def render_irpf():
     mobile+=f"</div><div class='irpf-final {cls}'>{label}: {euro(abs(diferencial))}</div></div>"
     st.markdown(html+mobile, unsafe_allow_html=True)
 
-login_gate(); header()
+login_gate(); migrate_csv_docs_to_real_collections(); header()
 NAV_OPTIONS=['📊 Dashboard','🐷 Ahorro','👤 Nóminas','％ Intereses','📋 IRPF','☁️ Backup']
 nav=st.radio('Secciones', NAV_OPTIONS, horizontal=True, label_visibility='collapsed', key='main_nav')
 if nav == '📊 Dashboard':
