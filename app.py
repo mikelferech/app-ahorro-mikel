@@ -29,8 +29,8 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.9.8"
-APP_UPDATED = "19/06/2026"
+APP_VERSION = "0.9.9"
+APP_UPDATED = "20/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
 MFE_LOGO = Path("mfe_cabecera.png")
@@ -234,6 +234,20 @@ input:focus, textarea:focus, [data-baseweb="input"]:focus-within, [data-baseweb=
 .irpf-table th{background:#c3005e!important;border-bottom:2px solid #c3005e!important;}
 .irpf-block-title{background:#c3005e!important;border-bottom:2px solid #c3005e!important;}
 
+
+/* v0.9.9: tabla intereses responsive en móvil */
+.interest-table-wrap{width:100%;overflow-x:auto;border:1px solid rgba(148,163,184,.18);border-radius:10px;}
+.interest-table{min-width:860px;}
+.interest-table .bank-col{min-width:145px;max-width:170px;}
+.interest-table .bank-name-cell{white-space:nowrap;}
+@media (max-width:760px){
+  .interest-table{min-width:740px;font-size:.88rem!important;}
+  .interest-table th,.interest-table td{padding:5px 6px!important;}
+  .interest-table .bank-col{min-width:132px;max-width:145px;}
+  .interest-table .bank-name-cell{gap:.18rem;font-size:.92rem;}
+  .interest-table .bank-icon{height:.95em!important;width:.95em!important;margin-right:.18em!important;}
+}
+
 /* v0.8.15: hueco Dashboard corregido eliminando iframes de localStorage; sin CSS agresivo sobre pestañas. */
 
 
@@ -344,6 +358,60 @@ def bank_cell_text_color(k):
     return color
 
 def rerun(): st.rerun()
+
+
+def clamp_date_value(d, min_date=None, max_date=None):
+    if isinstance(d, datetime):
+        d = d.date()
+    if not isinstance(d, date):
+        d = date.today()
+    if min_date and d < min_date:
+        d = min_date
+    if max_date and d > max_date:
+        d = max_date
+    return d
+
+def month_days_for_range(year, month, min_date=None, max_date=None):
+    last = calendar.monthrange(year, month)[1]
+    vals=[]
+    for dd in range(1,last+1):
+        d=date(year, month, dd)
+        if min_date and d < min_date:
+            continue
+        if max_date and d > max_date:
+            continue
+        vals.append(dd)
+    return vals or [1]
+
+def date_selector_lunes(label, year, key, default=None, min_date=None, max_date=None):
+    """Selector propio de fecha para vacaciones.
+
+    Evita el date_input nativo de Streamlit, cuyo popup puede empezar en domingo según navegador.
+    Usa Día/Mes/Año controlado por la app, de forma estable y con semana anual lunes.
+    """
+    min_date = min_date or date(year,1,1)
+    max_date = max_date or date(year,12,31)
+    default = clamp_date_value(default or min_date, min_date, max_date)
+    base_key=f"{key}_date"
+    if base_key not in st.session_state:
+        st.session_state[base_key]=default
+    cur=clamp_date_value(st.session_state.get(base_key, default), min_date, max_date)
+    st.markdown(f"<div style='font-weight:850;margin-bottom:.15rem'>{html.escape(label)}</div>", unsafe_allow_html=True)
+    c1,c2,c3=st.columns([.8,1.2,.8])
+    month_options=[m for m in range(1,13) if not (date(year,m,calendar.monthrange(year,m)[1]) < min_date or date(year,m,1) > max_date)]
+    if cur.month not in month_options:
+        cur=date(year, month_options[0], 1)
+        cur=clamp_date_value(cur,min_date,max_date)
+    mes=c2.selectbox('Mes', month_options, index=month_options.index(cur.month), format_func=lambda m: MONTHS_ES[m-1], key=f'{key}_mes', label_visibility='collapsed')
+    day_options=month_days_for_range(year, mes, min_date, max_date)
+    day=min(cur.day, max(day_options))
+    if day not in day_options:
+        day=day_options[0]
+    dia=c1.selectbox('Día', day_options, index=day_options.index(day), key=f'{key}_dia', label_visibility='collapsed')
+    c3.text_input('Año', value=str(year), disabled=True, key=f'{key}_anio', label_visibility='collapsed')
+    out=clamp_date_value(date(year, mes, dia), min_date, max_date)
+    st.session_state[base_key]=out
+    return out
 
 # ---------- lightweight persistent store ----------
 @st.cache_resource
@@ -500,6 +568,34 @@ def write_firestore_df(name, df):
         return False
 
 BROWSER_BACKUP_FILES = {"nominas.csv", "vacaciones.csv", "intereses.csv", "empresa_config.csv", "bancos.csv"}
+
+
+# Preparación migración Firestore real v0.9.9
+FIRESTORE_REAL_COLLECTIONS = {
+    "nominas.csv": "nominas",
+    "vacaciones.csv": "vacaciones",
+    "intereses.csv": "intereses",
+    "ahorro.csv": "ahorro",
+    "bancos.csv": "bancos",
+}
+
+def firestore_real_collection_ref(csv_name):
+    """Referencia prevista para el siguiente paso: colecciones reales por registro.
+    Aún no sustituye la lectura principal; deja preparada la ruta estable.
+    """
+    db = firestore_client_resource()
+    coll = FIRESTORE_REAL_COLLECTIONS.get(csv_name)
+    if db is None or not coll:
+        return None
+    return db.collection(FIREBASE_COLLECTION).document(FIREBASE_DOC).collection(coll)
+
+def firestore_record_id(row, idx=0):
+    parts=[]
+    for k in ["Anio","Fecha","Mes","Banco","Inicio","Fin","Clave","Nombre"]:
+        if k in row and str(row.get(k,'')).strip() not in ('','nan','None'):
+            parts.append(str(row.get(k)).strip())
+    base='__'.join(parts) if parts else f'registro_{idx:05d}'
+    return safe_key(base)[:120]
 
 # ---------- browser/local persistence ----------
 def _df_to_json_payload(df):
@@ -1862,11 +1958,17 @@ def render_vacaciones(year):
         if fin_key not in st.session_state:
             st.session_state[fin_key]=st.session_state[ini_key]
         cini, cfin = st.columns(2)
-        ini=cini.date_input('Inicio', value=st.session_state[ini_key], min_value=date(year,1,1), max_value=date(year,12,31), format='DD/MM/YYYY', key=ini_key)
+        with cini:
+            ini=date_selector_lunes('Inicio', year, f'vac_ini_sel_{year}', default=st.session_state[ini_key], min_date=date(year,1,1), max_date=date(year,12,31))
+        st.session_state[ini_key]=ini
         # Si al cambiar inicio la fecha fin queda antes, la subimos automáticamente a inicio.
         if st.session_state.get(fin_key) is None or st.session_state[fin_key] < ini:
             st.session_state[fin_key]=ini
-        fin=cfin.date_input('Fin', value=st.session_state[fin_key], min_value=ini, max_value=date(year,12,31), format='DD/MM/YYYY', key=fin_key)
+            # sincroniza selector propio de fin
+            st.session_state[f'vac_fin_sel_{year}_date']=ini
+        with cfin:
+            fin=date_selector_lunes('Fin', year, f'vac_fin_sel_{year}', default=st.session_state[fin_key], min_date=ini, max_date=date(year,12,31))
+        st.session_state[fin_key]=fin
         calc=laboral_days_between(ini, fin, year) if fin >= ini else 0
         dias_key=f'vac_dias_{year}'
         dates_key=f'vac_dates_key_{year}'
@@ -2013,14 +2115,14 @@ def render_intereses():
         bank_opts += extra
         filtro=st.selectbox('Filtrar por banco', ['Todos']+bank_opts, format_func=lambda k: 'Todos' if k=='Todos' else bank_name(k), key=f'int_filter_bank_{year}')
         show=ydf if filtro=='Todos' else ydf[ydf['Banco'].astype(str)==str(filtro)].copy()
-        html_tbl="<table class='irpf-table'><tr><th>Mes</th><th>Banco</th><th>Interés bruto</th><th>Retención 19%</th><th>Neto esperado</th><th>Ingresado</th><th>Diferencia</th></tr>"
+        html_tbl="<div class='interest-table-wrap'><table class='irpf-table interest-table'><tr><th>Mes</th><th class='bank-col'>Banco</th><th>Interés bruto</th><th>Retención 19%</th><th>Neto esperado</th><th>Ingresado</th><th>Diferencia</th></tr>"
         for _,r in show.iterrows():
             k=str(r.get('Banco',''))
             row_col=bank_cell_text_color(k)
             bicon_white=True if is_dark_color(bank_color(k)) else False
             bcell=f"<span class='bank-name-cell'>{bank_icon_html(k, white=bicon_white, size=20)}{html.escape(bank_name(k))}</span>"
             diff=money(r.get('Diferencia',0)); dcol='#22c55e' if diff>=0 else '#ef4444'
-            html_tbl += f"<tr style='color:{row_col};font-weight:850'><td>{html.escape(str(r.get('Mes','')))}</td><td>{bcell}</td><td class='irpf-num'>{euro(r.get('InteresBruto',0))}</td><td class='irpf-num'>{euro(r.get('Retencion',0))}</td><td class='irpf-num'>{euro(r.get('NetoEsperado',0))}</td><td class='irpf-num'>{euro(r.get('Ingresado',0))}</td><td class='irpf-num' style='color:{dcol};font-weight:950'>{euro(diff)}</td></tr>"
+            html_tbl += f"<tr style='color:{row_col};font-weight:850'><td>{html.escape(str(r.get('Mes','')))}</td><td class='bank-col'>{bcell}</td><td class='irpf-num'>{euro(r.get('InteresBruto',0))}</td><td class='irpf-num'>{euro(r.get('Retencion',0))}</td><td class='irpf-num'>{euro(r.get('NetoEsperado',0))}</td><td class='irpf-num'>{euro(r.get('Ingresado',0))}</td><td class='irpf-num' style='color:{dcol};font-weight:950'>{euro(diff)}</td></tr>"
         if not show.empty:
             s_bruto=show['InteresBruto'].apply(money).sum()
             s_ret=show['Retencion'].apply(money).sum()
@@ -2038,7 +2140,7 @@ def render_intereses():
                 f"<td class='irpf-num' style='color:{s_dcol};font-weight:950'>{euro(s_diff)}</td>"
                 "</tr>"
             )
-        html_tbl += "</table>"
+        html_tbl += "</table></div>"
         st.markdown(html_tbl, unsafe_allow_html=True)
 
         with st.expander('✏️ Editar / borrar intereses', expanded=False):
