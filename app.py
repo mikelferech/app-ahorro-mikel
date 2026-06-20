@@ -29,7 +29,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.10.0"
+APP_VERSION = "0.10.1"
 APP_UPDATED = "20/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -706,22 +706,26 @@ def write_firestore_collection_df(csv_name, df):
         st.session_state["firebase_error"] = str(e)
         return False
 
-def migrate_csv_docs_to_real_collections():
-    """Migra una vez desde data/*_csv o CSV local a colecciones reales.
-    No borra los documentos antiguos: quedan como respaldo.
+def migrate_csv_docs_to_real_collections(force=False, only_missing=True):
+    """Migra desde data/*_csv a colecciones reales.
+
+    - Por defecto solo crea colecciones que todavía no tengan documentos.
+    - Con force=True y only_missing=False puede reescribir colecciones desde el CSV legado.
+    - No borra los documentos antiguos data/*_csv: quedan como respaldo.
     """
     if not firebase_enabled():
-        return
+        return []
     key = "_firestore_real_migration_checked"
-    if st.session_state.get(key):
-        return
+    if (not force) and st.session_state.get(key):
+        return []
     st.session_state[key] = True
     migrated=[]
     for csv_name, coll in FIRESTORE_REAL_COLLECTIONS.items():
         ref = firestore_real_collection_ref(csv_name)
         if ref is None:
             continue
-        if _collection_count_quick(ref, 1) > 0:
+        existing_count = _collection_count_quick(ref, 1)
+        if only_missing and existing_count > 0:
             continue
         # Primero intentamos documento antiguo data/<csv>_csv.
         old_df = read_firestore_df(csv_name, None)
@@ -732,7 +736,25 @@ def migrate_csv_docs_to_real_collections():
                 migrated.append(csv_name)
     if migrated:
         st.session_state["firestore_real_migrated"] = migrated
+    return migrated
 
+def firestore_collection_status():
+    """Devuelve resumen rápido de colecciones reales para Backup/Migración."""
+    rows=[]
+    for csv_name, coll in FIRESTORE_REAL_COLLECTIONS.items():
+        ref = firestore_real_collection_ref(csv_name)
+        real_count = _collection_count_quick(ref, 2) if ref is not None else 0
+        legacy_df = read_firestore_df(csv_name, None)
+        legacy_rows = int(len(legacy_df)) if isinstance(legacy_df, pd.DataFrame) else 0
+        rows.append({
+            "Archivo": csv_name,
+            "Colección": coll,
+            "Firestore real": "Sí" if real_count > 0 else "No",
+            "CSV legado filas": legacy_rows,
+        })
+    return pd.DataFrame(rows)
+
+# ---------- browser/local persistence ----------
 # ---------- browser/local persistence ----------
 
 def _df_to_json_payload(df):
@@ -884,7 +906,9 @@ def save_csv(name, df):
     _session_df_cache()[name] = df.copy()
     memory_store()[name] = df.copy()
     ok_real = write_firestore_collection_df(name, df) if name in FIRESTORE_REAL_COLLECTIONS else False
-    ok_legacy = write_firestore_df(name, df)
+    # v0.10.1: si ya usamos colecciones reales, no reescribimos también el CSV legado.
+    # Esto reduce bastante la lentitud al guardar. Los documentos data/*_csv quedan como respaldo inicial.
+    ok_legacy = False if name in FIRESTORE_REAL_COLLECTIONS else write_firestore_df(name, df)
     if ok_real or ok_legacy:
         st.session_state["_last_firebase_save"] = datetime.now().strftime("%H:%M:%S")
 
@@ -1550,6 +1574,9 @@ def restore_backup(upload):
     for csv_name in FIRESTORE_FILES:
         df_restore = _read_local_csv(csv_name)
         if not df_restore.empty:
+            # Guarda tanto en colección real como en documento legado para máxima seguridad.
+            if csv_name in FIRESTORE_REAL_COLLECTIONS:
+                write_firestore_collection_df(csv_name, df_restore)
             write_firestore_df(csv_name, df_restore)
 
 def render_backup():
@@ -1567,6 +1594,25 @@ def render_backup():
             st.caption(f'Último guardado Firebase en esta sesión: {last}')
         else:
             st.caption('Los datos se cargan una vez por sesión para que la app vaya más rápida.')
+
+    with st.expander('🔥 Migración Firestore real', expanded=False):
+        st.caption('Pasa los antiguos documentos data/*_csv a colecciones reales para acelerar la app. No borra los CSV antiguos.')
+        m1, m2 = st.columns(2)
+        with m1:
+            if st.button('🚀 Migrar colecciones que falten', use_container_width=True):
+                migrated = migrate_csv_docs_to_real_collections(force=True, only_missing=True)
+                clear_data_cache()
+                if migrated:
+                    st.success('Migrado: ' + ', '.join(migrated))
+                else:
+                    st.info('No había colecciones pendientes de migrar.')
+                st.rerun()
+        with m2:
+            if st.button('🔎 Ver estado Firebase', use_container_width=True):
+                st.session_state['_show_firestore_status'] = True
+        if st.session_state.get('_show_firestore_status'):
+            st.dataframe(firestore_collection_status(), use_container_width=True, hide_index=True)
+
     st.download_button('📥 Descargar backup completo', data=create_backup_bytes(), file_name=f"Ahorro_Mikel_Backup_{date.today().isoformat()}.zip", mime='application/zip', use_container_width=True)
     st.divider()
     st.subheader('📤 Restaurar backup')
