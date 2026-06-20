@@ -29,7 +29,7 @@ except Exception:
     Image = None
 
 APP_TITLE = "Ahorro Mikel"
-APP_VERSION = "0.10.1"
+APP_VERSION = "0.10.2"
 APP_UPDATED = "20/06/2026"
 DATA = Path(".")
 ASSETS = Path(".")
@@ -1057,11 +1057,10 @@ def load_banks():
         rows=defaults_rows
     out=pd.DataFrame(rows, columns=cols).drop_duplicates('Clave', keep='last').sort_values(['Orden','Nombre'])
 
-    # Si la versión antigua de bancos.csv no tenía columnas de iconos, persistimos la migración.
-    try:
-        save_csv('bancos.csv', out)
-    except Exception:
-        pass
+    # v0.10.2 rendimiento: NO guardamos bancos en cada carga.
+    # Antes esto hacía save_csv('bancos.csv') cada vez que se consultaba bank_name/bank_color,
+    # provocando escrituras Firestore repetidas y mucha lentitud.
+    # Los bancos solo se guardan desde los formularios de creación/edición.
     return out
 
 def _bank_row(k):
